@@ -1,10 +1,71 @@
 ﻿<!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="utf-8">
-    <title>{{ test }}</title>
+    <title>{{ LongDate }}</title>
 </head>
+
+{{#*inline "SourceLink" ~}}
+<a href="{{WebUrl}}" target="_blank">{{Name}}</a>
+{{~ /inline}}
+
+{{#*inline "RefLink" ~}}
+<a href="{{RepoUrl}}/tree/{{RefName}}" target="_blank">{{RefName}}</a>
+{{~ /inline}}
+
+{{#*inline "ActorLink" ~}}
+<a href="{{ActorUrl}}" target="_blank">{{Actor}}</a>
+{{~ /inline}}
+
+{{#*inline "CommitsLink" ~}}
+<a href="{{RepoUrl}}/compare/{{BeforeSha}}...{{AfterSha}}" target="_blank">{{CommitCount}} {{#ifPlural CommitCount}}commits{{else}}commit{{/ifPlural}}</a>
+{{~ /inline}}
+
 <body>
-    <p>{{ test }}</p>
+    <h1>{{ LongDate }}</h1>
+
+    {{#each Repositories}}
+    <h2>{{> SourceLink}}</h2>
+
+    {{#each Branches}}
+    <h3>{{#with Activities.[0]}}{{> RefLink}}{{/with}}</h3>
+
+    <ul>
+        {{#each Pushes}}
+        <li>{{> ActorLink}} pushed {{> CommitsLink}}</li>
+        {{/each}}
+    </ul>
+    {{/each}}
+
+    <ul>
+        {{#each Pushes}}
+        <li>{{> ActorLink}} pushed {{> CommitsLink}} to {{> RefLink}}</li>
+        {{/each}}
+
+        {{#if CreatedBranches}}
+        <li>branches created: {{#each CreatedBranches}}{{#unless @first}}, {{/unless}} {{> RefLink}} ({{> ActorLink}}){{/each}}</li>
+        {{/if}}
+
+        {{#if DeletedBranches}}
+        <li>branches deleted: {{#each DeletedBranches}}{{#unless @first}}, {{/unless}} {{> RefLink}} ({{> ActorLink}}){{/each}}</li>
+        {{/if}}
+
+        {{#if CreatedTags}}
+        <li>tags created: {{#each CreatedTags}}{{#unless @first}}, {{/unless}} {{> RefLink}} ({{> ActorLink}}){{/each}}</li>
+        {{/if}}
+
+        {{#if DeletedTags}}
+        <li>tags deleted: {{#each DeletedTags}}{{#unless @first}}, {{/unless}} {{> RefLink}} ({{> ActorLink}}){{/each}}</li>
+        {{/if}}
+
+        {{#each Activities}}
+        <li>{{Kind}}</li>
+        {{else}}
+        (no activity)
+        {{/each}}
+    </ul>
+    {{/each}}
 </body>
+
 </html>
