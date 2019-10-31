@@ -1,0 +1,45 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+
+{{- func repo_link -}}
+<a href="{{ url }}/{{ $0.name | html.escape }}">{{ $0.name | html.escape }}</a>
+{{- end ~}}
+
+{{- func branch_link -}}
+<a href="{{ url }}/{{ $0.repo_name }}/tree/{{ $0.name | html.escape }}">{{ $0.name | html.escape }}</a>
+{{- end ~}}
+
+{{- func user_link -}}
+<a href="{{ url }}/{{ $0 | html.escape }}">{{ $0 | html.escape }}</a>
+{{- end ~}}
+
+{{- func commits_link -}}
+<a href="{{ url }}/{{ $0.repo_name }}/compare/{{ $0.before_sha }}...{{ $0.after_sha }}"">{{ $0.commit_count }} {{ if $0.commit_count == 1 }}commit{{ else }}commits{{ end }}</a>
+{{- end ~}}
+
+<head>
+<meta charset="utf-8">
+<title>{{ date | format 'D' | html.escape }}</title>
+</head>
+<body>
+
+<h1>{{ date | format 'D' | html.escape }}</h1>
+
+{{ for repo in repos ~}}
+<h2>{{ repo | repo_link }}</h2>
+
+{{ for branch in repo.branches ~}}
+<h3>{{ branch | branch_link }}</h3>
+{{ if !branch.pushes.empty? ~}}
+<ul>
+{{ for push in branch.pushes ~}}
+<li>{{ push.actor_name | user_link }} pushed {{ push | commits_link }}</li>
+{{ end # for push ~}}
+</ul>
+{{ end # if ~}}
+
+{{ end # for branch ~}}
+
+{{ end # for repo ~}}
+</body>
+</html>

@@ -1,6 +1,6 @@
-﻿namespace GitHubDigestBuilder
+namespace GitHubDigestBuilder
 {
-	public sealed class ActivitySourceSettings
+	public sealed class SourceSettings
 	{
 		public string Repo { get; set; }
 

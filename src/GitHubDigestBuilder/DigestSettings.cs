@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 
 namespace GitHubDigestBuilder
 {
@@ -6,7 +6,7 @@ namespace GitHubDigestBuilder
 	{
 		public GitHubSettings GitHub { get; set; }
 
-		public List<ActivitySourceSettings> Include { get; set; }
+		public List<SourceSettings> Include { get; set; }
 
 		public string OutputDirectory { get; set; }
 

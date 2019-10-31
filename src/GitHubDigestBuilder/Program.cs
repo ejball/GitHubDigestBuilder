@@ -1,5 +1,4 @@
-﻿using System;
-using System.Collections;
+using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -8,7 +7,8 @@ using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text.Json;
 using System.Threading.Tasks;
-using HandlebarsDotNet;
+using Scriban;
+using Scriban.Runtime;
 using YamlDotNet.Serialization;
 
 namespace GitHubDigestBuilder
@@ -17,8 +17,8 @@ namespace GitHubDigestBuilder
 	{
 		public static async Task RunAsync(IReadOnlyList<string> args)
 		{
-			if (args.Count != 1)
-				throw new ApplicationException("Usage: GitHubDigestBuilder configuration-file");
+			if (args.Count < 1 || args.Count > 2)
+				throw new ApplicationException("Usage: GitHubDigestBuilder configuration-file [date]");
 
 			var configFilePath = Path.GetFullPath(args[0]);
 			if (!File.Exists(configFilePath))
@@ -30,17 +30,17 @@ namespace GitHubDigestBuilder
 				new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
 
 			var timeZoneOffset = settings.TimeZoneOffsetHours != null ? TimeSpan.FromHours(settings.TimeZoneOffsetHours.Value) : DateTimeOffset.Now.Offset;
-			var now = new DateTimeOffset(DateTime.UtcNow).ToOffset(timeZoneOffset);
-			var endDate = new DateTimeOffset(now.Year, now.Month, now.Day, 0, 0, 0, timeZoneOffset);
-			var endDateUtc = endDate.UtcDateTime;
-			var startDate = endDate.AddDays(-1.0);
-			var startDateUtc = startDate.UtcDateTime;
-			var startDateIso = startDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+			var date = args.Count >= 2 ? ParseDate(args[1]) : new DateTimeOffset(DateTime.UtcNow).ToOffset(timeZoneOffset).Date.AddDays(-1.0);
+			var dateIso = date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+			var startDateTime = new DateTimeOffset(date.Year, date.Month, date.Day, 0, 0, 0, timeZoneOffset);
+			var startDateTimeUtc = startDateTime.UtcDateTime;
+			var endDateTime = startDateTime.AddDays(1.0);
+			var endDateTimeUtc = endDateTime.UtcDateTime;
 
 			string dumpDirectory = null;
 			if (settings.DumpDirectory != null)
 			{
-				dumpDirectory = Path.Combine(configFileDirectory, settings.DumpDirectory, startDateIso);
+				dumpDirectory = Path.Combine(configFileDirectory, settings.DumpDirectory, dateIso);
 				Directory.CreateDirectory(dumpDirectory);
 			}
 
@@ -52,24 +52,15 @@ namespace GitHubDigestBuilder
 				httpClient.DefaultRequestHeaders.Authorization = AuthenticationHeaderValue.Parse($"token {token}");
 
 			var apiBase = (settings.GitHub?.ApiUrl ?? "https://api.github.com").TrimEnd('/');
-			var webBase = (settings.GitHub?.WebUrl ?? "https://github.com").TrimEnd('/');
+			var handledEventIds = new HashSet<string>();
 
-			var repositories = new List<ActivitySourceData>();
-			var users = new List<ActivitySourceData>();
-
-			foreach (var activitySource in settings.Include ?? throw new ApplicationException("Configuration: 'include' is missing."))
+			async Task<(IReadOnlyList<JsonElement> Events, DateTime? PreviousDate, bool Failed)> loadEventsAsync(string sourceKind, string sourceName)
 			{
-				var (sourceKind, sourceName, isUser) = activitySource switch
-				{
-					{ Repo: var repoName, User: null } => ("repos", repoName, false),
-					{ Repo: null, User: var userName } => ("users", userName, true),
-					_ => throw new ArgumentException("Configuration: 'include' is invalid.''"),
-				};
+				var eventElements = new List<JsonElement>();
+				DateTime? previousDate = null;
 
-				var activities = new List<ActivityData>();
-
-				var isLastPage = false;
-				for (var pageNumber = 1; pageNumber <= 10 && !isLastPage; pageNumber++)
+				var foundLastPage = false;
+				for (var pageNumber = 1; pageNumber <= 10 && !foundLastPage; pageNumber++)
 				{
 					JsonDocument pageDocument;
 
@@ -98,99 +89,120 @@ namespace GitHubDigestBuilder
 						}
 					}
 
-					foreach (var activity in pageDocument.RootElement.EnumerateArray())
+					foreach (var eventElement in pageDocument.RootElement.EnumerateArray())
 					{
-						var createdUtc = ParseDateTime(activity.GetProperty("created_at").GetString());
-						if (createdUtc < startDateUtc)
+						var eventId = eventElement.GetProperty("id").GetString();
+						if (!handledEventIds.Add(eventId))
+							continue;
+
+						var createdUtc = ParseDateTime(eventElement.GetProperty("created_at").GetString());
+						if (createdUtc < startDateTimeUtc)
 						{
-							isLastPage = true;
+							foundLastPage = true;
+
+							if (previousDate is null)
+								previousDate = new DateTimeOffset(createdUtc).ToOffset(timeZoneOffset).Date;
 						}
-						else if (createdUtc < endDateUtc)
+						else if (createdUtc < endDateTimeUtc)
 						{
-							var payload = activity.GetProperty("payload");
-
-							var actor = activity.GetProperty("actor", "login").GetString();
-							var repo = activity.GetProperty("repo", "name").GetString();
-
-							var refType = payload.TryGetProperty("ref_type")?.GetString();
-							var refName = payload.TryGetProperty("ref")?.GetString();
-
-							const string branchRefPrefix = "refs/heads/";
-							if (refType == null && refName?.StartsWith(branchRefPrefix) == true)
-							{
-								refType = "branch";
-								refName = refName.Substring(branchRefPrefix.Length);
-							}
-
-							const string tagRefPrefix = "refs/tags/";
-							if (refType == null && refName?.StartsWith(tagRefPrefix) == true)
-							{
-								refType = "tag";
-								refName = refName.Substring(tagRefPrefix.Length);
-							}
-
-							activities.Add(
-								new ActivityData
-								{
-									EventId = activity.GetProperty("id").GetString(),
-									Kind = activity.GetProperty("type").GetString(),
-									Actor = actor,
-									ActorUrl = $"{webBase}/{actor}",
-									Repo = repo,
-									RepoUrl = $"{webBase}/{repo}",
-									RefType = refType,
-									RefName = refName,
-									BeforeSha = payload.TryGetProperty("before")?.GetString(),
-									AfterSha = payload.TryGetProperty("head")?.GetString(),
-									CommitCount = payload.TryGetProperty("size")?.GetInt32(),
-								});
+							eventElements.Add(eventElement);
 						}
 					}
 				}
 
-				var source = new ActivitySourceData
+				eventElements.Reverse();
+
+				return (eventElements, previousDate, foundLastPage);
+			}
+
+			var report = new ReportData
+			{
+				Date = date,
+				Url = (settings.GitHub?.WebUrl ?? "https://github.com").TrimEnd('/'),
+			};
+
+			var includeSources = settings.Include ?? throw new ApplicationException("Configuration: 'include' is missing.");
+
+			foreach (var includeSource in includeSources)
+			{
+				if (includeSource.Repo is string repoName)
 				{
-					Name = sourceName,
-					WebUrl = $"{webBase}/{sourceName}",
-					Activities = activities,
-				};
-				(isUser ? users : repositories).Add(source);
+					var (eventElements, previousDate, foundLastPage) = await loadEventsAsync("repos", repoName);
+
+					var repo = new RepoData { Name = repoName, PreviousDate = previousDate, IsPartial = !foundLastPage };
+
+					foreach (var eventElement in eventElements)
+					{
+						var eventId = eventElement.GetProperty("id").GetString();
+
+						var actorName = eventElement.GetProperty("actor", "login").GetString();
+						if (repoName != eventElement.GetProperty("repo", "name").GetString())
+							throw new InvalidOperationException($"Unexpected repository in event {eventId}.");
+						var payload = eventElement.GetProperty("payload");
+
+						var eventType = eventElement.GetProperty("type").GetString();
+						if (eventType == "PushEvent")
+						{
+							const string branchRefPrefix = "refs/heads/";
+							var refName = payload.TryGetProperty("ref")?.GetString();
+							if (refName?.StartsWith(branchRefPrefix) == true)
+							{
+								var branchName = refName.Substring(branchRefPrefix.Length);
+								var branch = repo.Branches.SingleOrDefault(x => x.Name == branchName);
+								if (branch == null)
+									repo.Branches.Add(branch = new RepoBranchData { Name = branchName, RepoName = repoName });
+
+								var beforeSha = payload.TryGetProperty("before")?.GetString();
+								var afterSha = payload.TryGetProperty("head")?.GetString();
+								var commitCount = payload.TryGetProperty("size")?.GetInt32();
+
+								var lastPush = branch.Pushes.LastOrDefault();
+								if (lastPush != null && lastPush.RepoName == repoName && lastPush.ActorName == actorName && lastPush.BranchName == branchName && lastPush.AfterSha == beforeSha)
+								{
+									// merge adjacent pushes
+									lastPush.AfterSha = afterSha;
+									lastPush.CommitCount += commitCount;
+								}
+								else
+								{
+									branch.Pushes.Add(new PushData
+									{
+										RepoName = repoName,
+										ActorName = actorName,
+										BranchName = branchName,
+										BeforeSha = beforeSha,
+										AfterSha = afterSha,
+										CommitCount = commitCount,
+									});
+								}
+							}
+						}
+					}
+
+					if (repo.Branches.Count != 0)
+						report.Repos.Add(repo);
+				}
 			}
 
 			var culture = settings.Culture == null ? CultureInfo.CurrentCulture : CultureInfo.GetCultureInfo(settings.Culture);
 
-			var report = new ReportData
-			{
-				LongDate = startDate.ToString("D", culture),
-				Repositories = repositories,
-				Users = users,
-			};
-
-			var outputFile = Path.Combine(configFileDirectory, settings.OutputDirectory ?? ".", $"{startDateIso}.html");
+			var outputFile = Path.Combine(configFileDirectory, settings.OutputDirectory ?? ".", $"{dateIso}.html");
 			Directory.CreateDirectory(Path.GetDirectoryName(outputFile));
 
-			var handlebars = Handlebars.Create(
-				new HandlebarsConfiguration
-				{
-					BlockHelpers = { ["ifPlural"] = IfPluralBlockHelper },
-				});
-			var templateText = GetEmbeddedResourceText("GitHubDigestBuilder.template.html");
-			var template = handlebars.Compile(templateText);
+			var templateText = GetEmbeddedResourceText("GitHubDigestBuilder.template.scriban-html");
+			var template = Template.Parse(templateText);
 
-			string reportHtml = template(report);
+			var templateContext = new TemplateContext { StrictVariables = true };
+			templateContext.PushCulture(culture);
+
+			var scriptObject = new ScriptObject();
+			scriptObject.Import(report);
+			scriptObject.Import(typeof(ReportFunctions));
+			templateContext.PushGlobal(scriptObject);
+
+			var reportHtml = template.Render(templateContext);
 
 			await File.WriteAllTextAsync(outputFile, reportHtml);
-		}
-
-		private static void IfPluralBlockHelper(TextWriter output, HelperOptions options, object context, object[] arguments)
-		{
-			if (arguments.Length != 1)
-				throw new HandlebarsException("ifPlural must have one argument.");
-
-			if (Convert.ToInt32(arguments[0], CultureInfo.InvariantCulture) > 1)
-				options.Template(output, null);
-			else
-				options.Inverse(output, null);
 		}
 
 		private static string GetEmbeddedResourceText(string name)
@@ -199,13 +211,11 @@ namespace GitHubDigestBuilder
 			return reader.ReadToEnd();
 		}
 
-		private static DateTime ParseDateTime(string value)
-		{
-			return DateTime.ParseExact(value,
-				"yyyy'-'MM'-'dd'T'HH':'mm':'ss'Z'",
-				CultureInfo.InvariantCulture,
-				DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal);
-		}
+		private static DateTime ParseDate(string value) =>
+			DateTime.ParseExact(value, "yyyy'-'MM'-'dd", CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal);
+
+		private static DateTime ParseDateTime(string value) =>
+			DateTime.ParseExact(value, "yyyy'-'MM'-'dd'T'HH':'mm':'ss'Z'", CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal);
 
 		public static async Task<int> Main(string[] args)
 		{

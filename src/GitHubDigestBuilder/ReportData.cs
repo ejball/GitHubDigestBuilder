@@ -1,13 +1,14 @@
-﻿using System.Collections.Generic;
+using System;
+using System.Collections.Generic;
 
 namespace GitHubDigestBuilder
 {
-	public sealed class ReportData
+	internal sealed class ReportData
 	{
-		public string LongDate { get; set; }
+		public DateTime? Date { get; set; }
 
-		public IReadOnlyList<ActivitySourceData> Repositories { get; set; }
+		public string Url { get; set; }
 
-		public IReadOnlyList<ActivitySourceData> Users { get; set; }
+		public List<RepoData> Repos { get; } = new List<RepoData>();
 	}
 }
