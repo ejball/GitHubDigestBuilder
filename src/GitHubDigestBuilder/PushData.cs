@@ -13,5 +13,7 @@ namespace GitHubDigestBuilder
 		public string AfterSha { get; set; }
 
 		public int? CommitCount { get; set; }
+
+		public int? NewCommitCount { get; set; }
 	}
 }

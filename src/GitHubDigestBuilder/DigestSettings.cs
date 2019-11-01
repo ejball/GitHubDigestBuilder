@@ -6,7 +6,7 @@ namespace GitHubDigestBuilder
 	{
 		public GitHubSettings GitHub { get; set; }
 
-		public List<SourceSettings> Include { get; set; }
+		public List<RepoSettings> Repos { get; set; }
 
 		public string OutputDirectory { get; set; }
 

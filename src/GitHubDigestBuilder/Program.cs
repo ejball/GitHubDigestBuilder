@@ -121,11 +121,11 @@ namespace GitHubDigestBuilder
 				Url = (settings.GitHub?.WebUrl ?? "https://github.com").TrimEnd('/'),
 			};
 
-			var includeSources = settings.Include ?? throw new ApplicationException("Configuration: 'include' is missing.");
+			var repoSources = settings.Repos ?? new List<RepoSettings>();
 
-			foreach (var includeSource in includeSources)
+			foreach (var repoSource in repoSources)
 			{
-				if (includeSource.Repo is string repoName)
+				if (repoSource.Name is string repoName)
 				{
 					var (eventElements, previousDate, foundLastPage) = await loadEventsAsync("repos", repoName);
 
@@ -155,6 +155,7 @@ namespace GitHubDigestBuilder
 								var beforeSha = payload.TryGetProperty("before")?.GetString();
 								var afterSha = payload.TryGetProperty("head")?.GetString();
 								var commitCount = payload.TryGetProperty("size")?.GetInt32();
+								var distinctCommitCount = payload.TryGetProperty("distinct_size")?.GetInt32();
 
 								var lastPush = branch.Pushes.LastOrDefault();
 								if (lastPush != null && lastPush.RepoName == repoName && lastPush.ActorName == actorName && lastPush.BranchName == branchName && lastPush.AfterSha == beforeSha)
@@ -162,6 +163,7 @@ namespace GitHubDigestBuilder
 									// merge adjacent pushes
 									lastPush.AfterSha = afterSha;
 									lastPush.CommitCount += commitCount;
+									lastPush.NewCommitCount += distinctCommitCount;
 								}
 								else
 								{
@@ -173,6 +175,7 @@ namespace GitHubDigestBuilder
 										BeforeSha = beforeSha,
 										AfterSha = afterSha,
 										CommitCount = commitCount,
+										NewCommitCount = distinctCommitCount,
 									});
 								}
 							}

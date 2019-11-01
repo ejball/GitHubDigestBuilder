@@ -3,19 +3,28 @@
 
 {{- func repo_link -}}
 <a href="{{ url }}/{{ $0.name | html.escape }}">{{ $0.name | html.escape }}</a>
-{{- end ~}}
+{{- end # func ~}}
 
 {{- func branch_link -}}
 <a href="{{ url }}/{{ $0.repo_name }}/tree/{{ $0.name | html.escape }}">{{ $0.name | html.escape }}</a>
-{{- end ~}}
+{{- end # func ~}}
 
 {{- func user_link -}}
 <a href="{{ url }}/{{ $0 | html.escape }}">{{ $0 | html.escape }}</a>
-{{- end ~}}
+{{- end # func ~}}
+
+{{- func commits_text -}}
+{{ if $0 == 1 }}commit{{ else }}commits{{ end -}}
+{{- end # func ~}}
 
 {{- func commits_link -}}
-<a href="{{ url }}/{{ $0.repo_name }}/compare/{{ $0.before_sha }}...{{ $0.after_sha }}"">{{ $0.commit_count }} {{ if $0.commit_count == 1 }}commit{{ else }}commits{{ end }}</a>
-{{- end ~}}
+<a href="{{ url }}/{{ $0.repo_name }}/compare/{{ $0.before_sha }}...{{ $0.after_sha }}"">
+{{- if $0.existing_commit_count == 0 -}}
+{{- $0.new_commit_count }} {{ $0.new_commit_count | commits_text }}</a>
+{{- else -}}
+{{- $0.commit_count }} {{ $0.commit_count | commits_text }}</a> ({{ $0.new_commit_count }} new)
+{{- end # if -}}
+{{- end # func ~}}
 
 <head>
 <meta charset="utf-8">
