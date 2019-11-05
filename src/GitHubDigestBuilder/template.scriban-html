@@ -1,16 +1,24 @@
 ﻿<!DOCTYPE html>
 <html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+<link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css" integrity="sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T" crossorigin="anonymous">
+<title>{{ date | format 'D' | html.escape }}</title>
+</head>
+<body>
+<div class="container">
 
 {{- func repo_link -}}
 <a href="{{ url }}/{{ $0.name | html.escape }}">{{ $0.name | html.escape }}</a>
 {{- end # func ~}}
 
 {{- func branch_link -}}
-<a href="{{ url }}/{{ $0.repo_name }}/tree/{{ $0.name | html.escape }}">{{ $0.name | html.escape }}</a>
+<code><a href="{{ url }}/{{ $0.repo_name }}/tree/{{ $0.name | html.escape }}">{{ $0.name | html.escape }}</a></code>
 {{- end # func ~}}
 
 {{- func user_link -}}
-<a href="{{ url }}/{{ $0 | html.escape }}">{{ $0 | html.escape }}</a>
+<a href="{{ url }}/{{ $0 | html.escape }}" class="text-body font-weight-bold">{{ $0 | html.escape }}</a>
 {{- end # func ~}}
 
 {{- func commits_text -}}
@@ -18,37 +26,52 @@
 {{- end # func ~}}
 
 {{- func commits_link -}}
-<a href="{{ url }}/{{ $0.repo_name }}/compare/{{ $0.before_sha }}...{{ $0.after_sha }}"">
-{{- if $0.existing_commit_count == 0 -}}
+{{- if $0.commit_count == 1 -}}
+<a href="{{ url }}/{{ $0.repo_name }}/commit/{{ $0.after_sha }}">
+{{- else -}}
+<a href="{{ url }}/{{ $0.repo_name }}/compare/{{ $0.before_sha }}...{{ $0.after_sha }}">
+{{- end # if -}}
+{{- if $0.commit_count == $0.new_commit_count -}}
 {{- $0.new_commit_count }} {{ $0.new_commit_count | commits_text }}</a>
 {{- else -}}
 {{- $0.commit_count }} {{ $0.commit_count | commits_text }}</a> ({{ $0.new_commit_count }} new)
 {{- end # if -}}
 {{- end # func ~}}
 
-<head>
-<meta charset="utf-8">
-<title>{{ date | format 'D' | html.escape }}</title>
-</head>
-<body>
+{{- func commit_link -}}
+<a href="{{ url }}/{{ $0.repo_name }}/commit/{{ $0.sha }}"><code>{{ commit.sha | string.slice 0 7 }}</code></a>
+{{- end # func ~}}
 
-<h1>{{ date | format 'D' | html.escape }}</h1>
+<h3>{{ date | format 'D' | html.escape }}</h3>
 
 {{ for repo in repos ~}}
-<h2>{{ repo | repo_link }}</h2>
+<h4>{{ repo | repo_link }} <small class="text-muted">repository</small></h4>
 
+<div class="ml-4">
 {{ for branch in repo.branches ~}}
-<h3>{{ branch | branch_link }}</h3>
+<h5>{{ branch | branch_link }} <small class="text-muted">branch</small></h5>
 {{ if !branch.pushes.empty? ~}}
-<ul>
+<ul class="list-unstyled ml-4">
 {{ for push in branch.pushes ~}}
-<li>{{ push.actor_name | user_link }} pushed {{ push | commits_link }}</li>
+<li>{{ push.actor_name | user_link }} pushed {{ push | commits_link }}
+{{ if !push.new_commits.empty? ~}}
+<ul class="list-unstyled ml-4">
+{{ for commit in push.new_commits ~}}
+<li class="text-truncate">{{ commit | commit_link }} {{ commit.subject }}</li>
+{{ end # for commit ~}}
+</ul>
+{{ end #if ~}}
+</li>
 {{ end # for push ~}}
 </ul>
 {{ end # if ~}}
-
 {{ end # for branch ~}}
+</div>
 
 {{ end # for repo ~}}
+</div>
+<script src="https://code.jquery.com/jquery-3.3.1.slim.min.js" integrity="sha384-q8i/X+965DzO0rT7abK41JStQIAqVgRVzpbzo5smXKp4YfRvH+8abtTE1Pi6jizo" crossorigin="anonymous"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.7/umd/popper.min.js" integrity="sha384-UO2eT0CpHqdSJQ6hJty5KVphtPhzWj9WO1clHTMGa3JDZwrnQq4sF86dIHNDz0W1" crossorigin="anonymous"></script>
+<script src="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/js/bootstrap.min.js" integrity="sha384-JjSmVgyd0p3pXB1rRibZUAYoIIy6OrQ6VrjIEaFf/nJGzIxFDsf4x0xIM+B07jRM" crossorigin="anonymous"></script>
 </body>
 </html>

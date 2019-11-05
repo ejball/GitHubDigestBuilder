@@ -6,6 +6,7 @@ using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Scriban;
 using Scriban.Runtime;
@@ -154,28 +155,44 @@ namespace GitHubDigestBuilder
 
 								var beforeSha = payload.TryGetProperty("before")?.GetString();
 								var afterSha = payload.TryGetProperty("head")?.GetString();
-								var commitCount = payload.TryGetProperty("size")?.GetInt32();
-								var distinctCommitCount = payload.TryGetProperty("distinct_size")?.GetInt32();
+								var commitCount = payload.TryGetProperty("size")?.GetInt32() ?? 0;
+								var distinctCommitCount = payload.TryGetProperty("distinct_size")?.GetInt32() ?? 0;
+								var commits = payload.TryGetProperty("commits")?.EnumerateArray().ToList() ?? new List<JsonElement>();
+								var canMerge = commitCount == commits.Count;
 
-								var lastPush = branch.Pushes.LastOrDefault();
-								if (lastPush != null && lastPush.RepoName == repoName && lastPush.ActorName == actorName && lastPush.BranchName == branchName && lastPush.AfterSha == beforeSha)
+								var push = branch.Pushes.LastOrDefault();
+								if (push == null ||
+									push.RepoName != repoName ||
+									push.ActorName != actorName ||
+									push.BranchName != branchName ||
+									push.AfterSha != beforeSha ||
+									!push.CanMerge ||
+									!canMerge)
 								{
-									// merge adjacent pushes
-									lastPush.AfterSha = afterSha;
-									lastPush.CommitCount += commitCount;
-									lastPush.NewCommitCount += distinctCommitCount;
-								}
-								else
-								{
-									branch.Pushes.Add(new PushData
+									push = new PushData
 									{
 										RepoName = repoName,
 										ActorName = actorName,
 										BranchName = branchName,
 										BeforeSha = beforeSha,
-										AfterSha = afterSha,
-										CommitCount = commitCount,
-										NewCommitCount = distinctCommitCount,
+										CanMerge = canMerge,
+									};
+									branch.Pushes.Add(push);
+								}
+
+								push.AfterSha = afterSha;
+								push.CommitCount += commitCount;
+								push.NewCommitCount += distinctCommitCount;
+
+								foreach (var commit in commits.Where(x => x.TryGetProperty("distinct")?.GetBoolean() == true))
+								{
+									var message = commit.TryGetProperty("message")?.GetString() ?? "";
+
+									push.NewCommits.Add(new CommitData
+									{
+										RepoName = repoName,
+										Sha = commit.GetProperty("sha").GetString(),
+										Subject = Regex.Match(message, @"^[^\r\n]*", RegexOptions.Singleline).Value,
 									});
 								}
 							}

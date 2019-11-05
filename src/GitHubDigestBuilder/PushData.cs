@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+
 namespace GitHubDigestBuilder
 {
 	internal sealed class PushData
@@ -12,8 +14,12 @@ namespace GitHubDigestBuilder
 
 		public string AfterSha { get; set; }
 
-		public int? CommitCount { get; set; }
+		public int CommitCount { get; set; }
 
-		public int? NewCommitCount { get; set; }
+		public int NewCommitCount { get; set; }
+
+		public List<CommitData> NewCommits { get; } = new List<CommitData>();
+
+		public bool CanMerge { get; set; }
 	}
 }
