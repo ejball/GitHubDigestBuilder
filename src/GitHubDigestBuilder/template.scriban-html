@@ -17,6 +17,10 @@
 <code><a href="{{ url }}/{{ $0.repo_name }}/tree/{{ $0.name | html.escape }}">{{ $0.name | html.escape }}</a></code>
 {{- end # func ~}}
 
+{{- func tag_link -}}
+<code><a href="{{ url }}/{{ $0.repo_name }}/tree/{{ $0.tag_name | html.escape }}">{{ $0.tag_name | html.escape }}</a></code>
+{{- end # func ~}}
+
 {{- func user_link -}}
 <a href="{{ url }}/{{ $0 | html.escape }}" class="text-body font-weight-bold">{{ $0 | html.escape }}</a>
 {{- end # func ~}}
@@ -72,6 +76,18 @@
 </ul>
 {{ end # if ~}}
 {{ end # for branch ~}}
+{{ if !repo.tag_events.empty? ~}}
+<h5>tags</h5>
+<ul class="list-unstyled ml-4">
+{{ for event in repo.tag_events ~}}
+{{ if event.kind == 'create-tag' }}
+<li class="text-truncate">{{ event.actor_name | user_link }} created tag {{ event | tag_link }}</li>
+{{ else if event.kind == 'delete-tag' }}
+<li class="text-truncate">{{ event.actor_name | user_link }} deleted tag {{ event | tag_link }}</li>
+{{ end # if event.kind ~}}
+{{ end # if ~}}
+</ul>
+{{ end # for event ~}}
 </div>
 
 {{ end # for repo ~}}

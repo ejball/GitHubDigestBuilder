@@ -222,6 +222,16 @@ namespace GitHubDigestBuilder
 									BranchName = branchName,
 								});
 							}
+							else if (refType == "tag")
+							{
+								repo.TagEvents.Add(new TagEventData
+								{
+									Kind = isDelete ? "delete-tag" : "create-tag",
+									RepoName = repoName,
+									ActorName = actorName,
+									TagName = payload.GetProperty("ref").GetString(),
+								});
+							}
 						}
 					}
 
