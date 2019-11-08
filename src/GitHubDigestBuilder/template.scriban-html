@@ -57,7 +57,7 @@
 {{ if !push.new_commits.empty? ~}}
 <ul class="list-unstyled ml-4">
 {{ for commit in push.new_commits ~}}
-<li class="text-truncate">{{ commit | commit_link }} {{ commit.subject }}</li>
+<li class="text-truncate">{{ commit | commit_link }} {{ commit.subject }} <span class="text-muted">{{ commit.remarks }}</span></li>
 {{ end # for commit ~}}
 </ul>
 {{ end #if ~}}

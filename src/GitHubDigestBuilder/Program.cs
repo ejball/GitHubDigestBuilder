@@ -187,12 +187,16 @@ namespace GitHubDigestBuilder
 								foreach (var commit in commits.Where(x => x.TryGetProperty("distinct")?.GetBoolean() == true))
 								{
 									var message = commit.TryGetProperty("message")?.GetString() ?? "";
+									var messageMatch = Regex.Match(message, @"^([^\r\n]*)(.*)$", RegexOptions.Singleline);
+									var subject = messageMatch.Groups[1].Value.Trim();
+									var remarks = Regex.Replace(messageMatch.Groups[2].Value.Trim(), @"\s+", " ");
 
 									push.NewCommits.Add(new CommitData
 									{
 										RepoName = repoName,
 										Sha = commit.GetProperty("sha").GetString(),
-										Subject = Regex.Match(message, @"^[^\r\n]*", RegexOptions.Singleline).Value,
+										Subject = subject,
+										Remarks = remarks,
 									});
 								}
 							}

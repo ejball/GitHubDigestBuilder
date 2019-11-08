@@ -7,5 +7,7 @@ namespace GitHubDigestBuilder
 		public string Sha { get; set; }
 
 		public string Subject { get; set; }
+
+		public string Remarks { get; set; }
 	}
 }
