@@ -4,10 +4,16 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
 <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css" integrity="sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T" crossorigin="anonymous">
+<link rel="stylesheet" href="https://cdn.rawgit.com/afeld/bootstrap-toc/v1.0.1/dist/bootstrap-toc.min.css" />
 <title>{{ date | format 'D' | html.escape }}</title>
+<style>
+nav[data-toggle="toc"] { top: 42px }
+</style>
 </head>
-<body>
+<body data-spy="scroll" data-target="#toc">
 <div class="container">
+<div class="row">
+<div class="col-sm-9">
 
 {{- func repo_link -}}
 <a href="{{ url }}/{{ $0.name | html.escape }}">{{ $0.name | html.escape }}</a>
@@ -46,14 +52,14 @@
 <a href="{{ url }}/{{ $0.repo_name }}/commit/{{ $0.sha }}"><code>{{ commit.sha | string.slice 0 7 }}</code></a>
 {{- end # func ~}}
 
-<h3>{{ date | format 'D' | html.escape }}</h3>
+<h3>{{ date | format 'D' | html.escape }}</h1>
 
 {{ for repo in repos ~}}
-<h4>{{ repo | repo_link }} <small class="text-muted">repository</small></h4>
+<h4 id="{{ repo.name | string.handleize }}" data-toc-text="{{ repo.name | html.escape }}">{{ repo | repo_link }} <small class="text-muted">repository</small></h4>
 
 <div class="ml-4">
 {{ for branch in repo.branches ~}}
-<h5>{{ branch | branch_link }} <small class="text-muted">branch</small></h5>
+<h5 id="{{ repo.name | string.handleize }}-{{ branch.name | string.handleize }}" data-toc-text="{{ branch.name | html.escape }}">{{ branch | branch_link }} <small class="text-muted">branch</small></h5>
 {{ if !branch.events.empty? ~}}
 <ul class="list-unstyled ml-4">
 {{ for event in branch.events ~}}
@@ -77,7 +83,7 @@
 {{ end # if ~}}
 {{ end # for branch ~}}
 {{ if !repo.tag_events.empty? ~}}
-<h5>tags</h5>
+<h5 id="{{ repo.name | string.handleize }}-tags">tags</h5>
 <ul class="list-unstyled ml-4">
 {{ for event in repo.tag_events ~}}
 {{ if event.kind == 'create-tag' }}
@@ -92,8 +98,14 @@
 
 {{ end # for repo ~}}
 </div>
+<div class="col-sm-3">
+<nav id="toc" data-toggle="toc" class="sticky-top"></nav>
+</div>
+</div>
+</div>
 <script src="https://code.jquery.com/jquery-3.3.1.slim.min.js" integrity="sha384-q8i/X+965DzO0rT7abK41JStQIAqVgRVzpbzo5smXKp4YfRvH+8abtTE1Pi6jizo" crossorigin="anonymous"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.7/umd/popper.min.js" integrity="sha384-UO2eT0CpHqdSJQ6hJty5KVphtPhzWj9WO1clHTMGa3JDZwrnQq4sF86dIHNDz0W1" crossorigin="anonymous"></script>
 <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/js/bootstrap.min.js" integrity="sha384-JjSmVgyd0p3pXB1rRibZUAYoIIy6OrQ6VrjIEaFf/nJGzIxFDsf4x0xIM+B07jRM" crossorigin="anonymous"></script>
+<script src="https://cdn.rawgit.com/afeld/bootstrap-toc/v1.0.1/dist/bootstrap-toc.min.js"></script>
 </body>
 </html>
