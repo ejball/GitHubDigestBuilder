@@ -2,12 +2,8 @@ using System.Collections.Generic;
 
 namespace GitHubDigestBuilder
 {
-	internal sealed class PushData
+	internal sealed class PushEventData : EventData
 	{
-		public string RepoName { get; set; }
-
-		public string ActorName { get; set; }
-
 		public string BranchName { get; set; }
 
 		public string BeforeSha { get; set; }

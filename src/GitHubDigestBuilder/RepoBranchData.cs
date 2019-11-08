@@ -8,6 +8,6 @@ namespace GitHubDigestBuilder
 
 		public string RepoName { get; set; }
 
-		public List<PushData> Pushes { get; } = new List<PushData>();
+		public List<EventData> Events { get; } = new List<EventData>();
 	}
 }

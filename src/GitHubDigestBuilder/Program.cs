@@ -160,7 +160,7 @@ namespace GitHubDigestBuilder
 								var commits = payload.TryGetProperty("commits")?.EnumerateArray().ToList() ?? new List<JsonElement>();
 								var canMerge = commitCount == commits.Count;
 
-								var push = branch.Pushes.LastOrDefault();
+								var push = branch.Events.LastOrDefault() as PushEventData;
 								if (push == null ||
 									push.RepoName != repoName ||
 									push.ActorName != actorName ||
@@ -169,15 +169,16 @@ namespace GitHubDigestBuilder
 									!push.CanMerge ||
 									!canMerge)
 								{
-									push = new PushData
+									push = new PushEventData
 									{
+										Kind = "push",
 										RepoName = repoName,
 										ActorName = actorName,
 										BranchName = branchName,
 										BeforeSha = beforeSha,
 										CanMerge = canMerge,
 									};
-									branch.Pushes.Add(push);
+									branch.Events.Add(push);
 								}
 
 								push.AfterSha = afterSha;
@@ -199,6 +200,27 @@ namespace GitHubDigestBuilder
 										Remarks = remarks,
 									});
 								}
+							}
+						}
+						else if (eventType == "CreateEvent" || eventType == "DeleteEvent")
+						{
+							var isDelete = eventType == "DeleteEvent";
+
+							var refType = payload.GetProperty("ref_type").GetString();
+							if (refType == "branch")
+							{
+								var branchName = payload.GetProperty("ref").GetString();
+								var branch = repo.Branches.SingleOrDefault(x => x.Name == branchName);
+								if (branch == null)
+									repo.Branches.Add(branch = new RepoBranchData { Name = branchName, RepoName = repoName });
+
+								branch.Events.Add(new BranchEventData
+								{
+									Kind = isDelete ? "delete-branch" : "create-branch",
+									RepoName = repoName,
+									ActorName = actorName,
+									BranchName = branchName,
+								});
 							}
 						}
 					}

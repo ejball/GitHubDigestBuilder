@@ -50,19 +50,25 @@
 <div class="ml-4">
 {{ for branch in repo.branches ~}}
 <h5>{{ branch | branch_link }} <small class="text-muted">branch</small></h5>
-{{ if !branch.pushes.empty? ~}}
+{{ if !branch.events.empty? ~}}
 <ul class="list-unstyled ml-4">
-{{ for push in branch.pushes ~}}
-<li>{{ push.actor_name | user_link }} pushed {{ push | commits_link }}
-{{ if !push.new_commits.empty? ~}}
+{{ for event in branch.events ~}}
+{{ if event.kind == 'push' }}
+<li>{{ event.actor_name | user_link }} pushed {{ event | commits_link }}
+{{ if !event.new_commits.empty? ~}}
 <ul class="list-unstyled ml-4">
-{{ for commit in push.new_commits ~}}
+{{ for commit in event.new_commits ~}}
 <li class="text-truncate">{{ commit | commit_link }} {{ commit.subject }} <span class="text-muted">{{ commit.remarks }}</span></li>
 {{ end # for commit ~}}
 </ul>
 {{ end #if ~}}
 </li>
-{{ end # for push ~}}
+{{ else if event.kind == 'create-branch' }}
+<li class="text-truncate">{{ event.actor_name | user_link }} created branch</li>
+{{ else if event.kind == 'delete-branch' }}
+<li class="text-truncate">{{ event.actor_name | user_link }} deleted branch</li>
+{{ end # if event.kind ~}}
+{{ end # for event ~}}
 </ul>
 {{ end # if ~}}
 {{ end # for branch ~}}
