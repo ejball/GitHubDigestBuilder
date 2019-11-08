@@ -13,6 +13,8 @@ namespace GitHubDigestBuilder
 
 		public List<RepoBranchData> Branches { get; } = new List<RepoBranchData>();
 
-		public List<EventData> TagEvents { get; } = new List<EventData>();
+		public List<TagEventData> TagEvents { get; } = new List<TagEventData>();
+
+		public List<WikiEventData> WikiEvents { get; } = new List<WikiEventData>();
 	}
 }

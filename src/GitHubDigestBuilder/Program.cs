@@ -162,7 +162,6 @@ namespace GitHubDigestBuilder
 
 								var push = branch.Events.LastOrDefault() as PushEventData;
 								if (push == null ||
-									push.RepoName != repoName ||
 									push.ActorName != actorName ||
 									push.BranchName != branchName ||
 									push.AfterSha != beforeSha ||
@@ -231,6 +230,29 @@ namespace GitHubDigestBuilder
 									ActorName = actorName,
 									TagName = payload.GetProperty("ref").GetString(),
 								});
+							}
+						}
+						else if (eventType == "GollumEvent")
+						{
+							foreach (var page in payload.GetProperty("pages").EnumerateArray())
+							{
+								var action = page.GetProperty("action").GetString();
+								var pageName = page.GetProperty("page_name").GetString();
+								var wikiEvent = repo.WikiEvents.LastOrDefault();
+								if (wikiEvent == null || wikiEvent.ActorName != actorName || wikiEvent.PageName != pageName)
+								{
+									wikiEvent = new WikiEventData
+									{
+										Kind = $"{action}-wiki-page",
+										RepoName = repoName,
+										ActorName = actorName,
+										PageName = pageName,
+									};
+									repo.WikiEvents.Add(wikiEvent);
+								}
+
+								// leave created kind, but use last title
+								wikiEvent.PageTitle = page.GetProperty("title").GetString();
 							}
 						}
 					}

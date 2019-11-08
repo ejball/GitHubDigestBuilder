@@ -28,6 +28,10 @@ a:hover, a:focus { text-decoration: none }
 <code><a href="{{ url }}/{{ $0.repo_name }}/tree/{{ $0.tag_name | html.escape }}">{{ $0.tag_name | html.escape }}</a></code>
 {{- end # func ~}}
 
+{{- func wiki_link -}}
+<code><a href="{{ url }}/{{ $0.repo_name }}/wiki/{{ $0.page_name | html.escape }}">{{ $0.page_title | html.escape }}</a></code>
+{{- end # func ~}}
+
 {{- func user_link -}}
 <a href="{{ url }}/{{ $0 | html.escape }}" class="text-body font-weight-bold">{{ $0 | html.escape }}</a>
 {{- end # func ~}}
@@ -59,6 +63,7 @@ a:hover, a:focus { text-decoration: none }
 <h4 id="{{ repo.name | string.handleize }}" data-toc-text="{{ repo.name | html.escape }}">{{ repo | repo_link }} <small class="text-muted">repository</small></h4>
 
 <div class="ml-4">
+
 {{ for branch in repo.branches ~}}
 <h5 id="{{ repo.name | string.handleize }}-{{ branch.name | string.handleize }}" data-toc-text="{{ branch.name | html.escape }}">{{ branch | branch_link }} <small class="text-muted">branch</small></h5>
 {{ if !branch.events.empty? ~}}
@@ -83,6 +88,7 @@ a:hover, a:focus { text-decoration: none }
 </ul>
 {{ end # if ~}}
 {{ end # for branch ~}}
+
 {{ if !repo.tag_events.empty? ~}}
 <h5 id="{{ repo.name | string.handleize }}-tags">tags</h5>
 <ul class="list-unstyled ml-4">
@@ -95,6 +101,20 @@ a:hover, a:focus { text-decoration: none }
 {{ end # if ~}}
 </ul>
 {{ end # for event ~}}
+
+{{ if !repo.wiki_events.empty? ~}}
+<h5 id="{{ repo.name | string.handleize }}-wiki">wiki</h5>
+<ul class="list-unstyled ml-4">
+{{ for event in repo.wiki_events ~}}
+{{ if event.kind == 'created-wiki-page' }}
+<li class="text-truncate">{{ event.actor_name | user_link }} created {{ event | wiki_link }}</li>
+{{ else if event.kind == 'edited-wiki-page' }}
+<li class="text-truncate">{{ event.actor_name | user_link }} edited {{ event | wiki_link }}</li>
+{{ end # if event.kind ~}}
+{{ end # if ~}}
+</ul>
+{{ end # for event ~}}
+
 </div>
 
 {{ end # for repo ~}}
