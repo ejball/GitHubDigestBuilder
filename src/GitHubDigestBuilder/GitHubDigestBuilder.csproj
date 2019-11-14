@@ -8,6 +8,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <EmbeddedResource Include="exception.scriban-html" />
     <EmbeddedResource Include="template.scriban-html" />
   </ItemGroup>
 
