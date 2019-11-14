@@ -128,7 +128,7 @@ namespace GitHubDigestBuilder
 				{
 					Date = date,
 					PreviousDate = date.AddDays(-1),
-					Url = (settings.GitHub?.WebUrl ?? "https://github.com").TrimEnd('/'),
+					BaseUrl = (settings.GitHub?.WebUrl ?? "https://github.com").TrimEnd('/'),
 					AutoRefresh = autoRefresh,
 				};
 
