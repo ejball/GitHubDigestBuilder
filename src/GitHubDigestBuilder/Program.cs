@@ -127,6 +127,7 @@ namespace GitHubDigestBuilder
 				var report = new ReportData
 				{
 					Date = date,
+					PreviousDate = date.AddDays(-1),
 					Url = (settings.GitHub?.WebUrl ?? "https://github.com").TrimEnd('/'),
 					AutoRefresh = autoRefresh,
 				};

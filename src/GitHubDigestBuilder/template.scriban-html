@@ -60,7 +60,8 @@ a:hover, a:focus { text-decoration: none }
 <a href="{{ url }}/{{ $0.repo_name }}/commit/{{ $0.sha }}"><code>{{ commit.sha | string.slice 0 7 }}</code></a>
 {{- end # func ~}}
 
-<h3>{{ date | format 'D' | html.escape }}</h1>
+<h3>{{ date | format 'D' | html.escape }}</h3>
+<p><a href="./{{ previous_date | format 'yyyy-MM-dd' }}.html">« previous</a> | <a href="./">latest »</a></p>
 
 {{ for repo in repos ~}}
 <h4 id="{{ repo.name | string.handleize }}" data-toc-text="{{ repo.name | html.escape }}">{{ repo | repo_link }} <small class="text-muted">repository</small></h4>

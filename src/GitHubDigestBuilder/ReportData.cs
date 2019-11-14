@@ -7,6 +7,8 @@ namespace GitHubDigestBuilder
 	{
 		public DateTime? Date { get; set; }
 
+		public DateTime? PreviousDate { get; set; }
+
 		public string Url { get; set; }
 
 		public bool AutoRefresh { get; set; }
