@@ -98,9 +98,9 @@ a:hover, a:focus { text-decoration: none }
 {{ else if event.kind == 'delete-tag' }}
 <li class="text-truncate">{{ event.actor_name | user_link }} deleted tag {{ event | tag_link }}</li>
 {{ end # if event.kind ~}}
-{{ end # if ~}}
-</ul>
 {{ end # for event ~}}
+</ul>
+{{ end # if ~}}
 
 {{ if !repo.wiki_events.empty? ~}}
 <h5 id="{{ repo.name | string.handleize }}-wiki">wiki</h5>
@@ -111,9 +111,34 @@ a:hover, a:focus { text-decoration: none }
 {{ else if event.kind == 'edited-wiki-page' }}
 <li class="text-truncate">{{ event.actor_name | user_link }} edited {{ event | wiki_link }}</li>
 {{ end # if event.kind ~}}
-{{ end # if ~}}
-</ul>
 {{ end # for event ~}}
+</ul>
+{{ end # if ~}}
+
+{{ if !repo.commented_commits.empty? ~}}
+<h5 id="{{ repo.name | string.handleize }}-comments">commit comments</h5>
+<ul class="list-unstyled ml-4">
+{{ for commit in repo.commented_commits ~}}
+<li class="text-truncate">{{ commit | commit_link }}
+<ul class="list-unstyled ml-4">
+{{ for conversation in commit.conversations ~}}
+{{ if conversation.file_path ~}}
+<li class="text-truncate"><code>{{ conversation.file_path | html.escape }}</code> (line {{ conversation.file_line }})
+<ul class="list-unstyled ml-4">
+{{ end # if }}
+{{ for comment in conversation.comments ~}}
+<li class="text-truncate">{{ comment.actor_name | user_link }}: {{ comment.body | html.escape }}</li>
+{{ end # for comment ~}}
+{{ if conversation.file_path ~}}
+</ul>
+</li>
+{{ end # if }}
+{{ end # for conversation ~}}
+</ul>
+</li>
+{{ end # for commit ~}}
+</ul>
+{{ end # if ~}}
 
 </div>
 

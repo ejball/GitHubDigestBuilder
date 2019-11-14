@@ -255,6 +255,28 @@ namespace GitHubDigestBuilder
 								wikiEvent.PageTitle = page.GetProperty("title").GetString();
 							}
 						}
+						else if (eventType == "CommitCommentEvent")
+						{
+							var data = payload.GetProperty("comment");
+							var sha = data.GetProperty("commit_id").GetString();
+							var filePath = data.TryGetProperty("path")?.GetString();
+							var fileLineProperty = data.TryGetProperty("line");
+							var fileLine = fileLineProperty == null || fileLineProperty.Value.ValueKind == JsonValueKind.Null ? default(int?) : fileLineProperty.Value.GetInt32();
+
+							var commit = repo.CommentedCommits.SingleOrDefault(x => x.Sha == sha);
+							if (commit == null)
+								repo.CommentedCommits.Add(commit = new CommentedCommitData { RepoName = repoName, Sha = sha });
+
+							var conversation = commit.Conversations.SingleOrDefault(x => x.FilePath == filePath && x.FileLine == fileLine);
+							if (conversation == null)
+								commit.Conversations.Add(conversation = new CommitConversationData { FilePath = filePath, FileLine = fileLine });
+
+							conversation.Comments.Add(new CommitCommentData
+							{
+								ActorName = actorName,
+								Body = data.GetProperty("body").GetString(),
+							});
+						}
 					}
 
 					if (repo.Branches.Count != 0)

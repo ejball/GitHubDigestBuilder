@@ -16,5 +16,7 @@ namespace GitHubDigestBuilder
 		public List<TagEventData> TagEvents { get; } = new List<TagEventData>();
 
 		public List<WikiEventData> WikiEvents { get; } = new List<WikiEventData>();
+
+		public List<CommentedCommitData> CommentedCommits { get; } = new List<CommentedCommitData>();
 	}
 }
