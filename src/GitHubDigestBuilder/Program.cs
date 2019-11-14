@@ -8,6 +8,7 @@ using System.Net.Http.Headers;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+using ArgsReading;
 using Scriban;
 using Scriban.Runtime;
 using YamlDotNet.Serialization;
@@ -16,12 +17,14 @@ namespace GitHubDigestBuilder
 {
 	public static class Program
 	{
-		public static async Task RunAsync(IReadOnlyList<string> args)
+		public static async Task RunAsync(ArgsReader args)
 		{
-			if (args.Count < 1 || args.Count > 2)
-				throw new ApplicationException("Usage: GitHubDigestBuilder configuration-file [date]");
+			var dateString = args.ReadOption("date");
+			var autoRefresh = args.ReadFlag("auto-refresh");
+			var configFilePath = args.ReadArgument();
+			args.VerifyComplete();
 
-			var configFilePath = Path.GetFullPath(args[0]);
+			configFilePath = Path.GetFullPath(configFilePath);
 			if (!File.Exists(configFilePath))
 				throw new ApplicationException("Configuration file not found.");
 			var configFileDirectory = Path.GetDirectoryName(configFilePath);
@@ -31,7 +34,7 @@ namespace GitHubDigestBuilder
 				new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
 
 			var timeZoneOffset = settings.TimeZoneOffsetHours != null ? TimeSpan.FromHours(settings.TimeZoneOffsetHours.Value) : DateTimeOffset.Now.Offset;
-			var date = args.Count >= 2 ? ParseDate(args[1]) : new DateTimeOffset(DateTime.UtcNow).ToOffset(timeZoneOffset).Date.AddDays(-1.0);
+			var date = dateString != null ? ParseDate(dateString) : new DateTimeOffset(DateTime.UtcNow).ToOffset(timeZoneOffset).Date.AddDays(-1.0);
 			var dateIso = date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
 			var startDateTime = new DateTimeOffset(date.Year, date.Month, date.Day, 0, 0, 0, timeZoneOffset);
 			var startDateTimeUtc = startDateTime.UtcDateTime;
@@ -125,6 +128,7 @@ namespace GitHubDigestBuilder
 				{
 					Date = date,
 					Url = (settings.GitHub?.WebUrl ?? "https://github.com").TrimEnd('/'),
+					AutoRefresh = autoRefresh,
 				};
 
 				var repoSources = settings.Repos ?? new List<RepoSettings>();
@@ -342,8 +346,13 @@ namespace GitHubDigestBuilder
 		{
 			try
 			{
-				await RunAsync(args);
+				await RunAsync(new ArgsReader(args));
 				return 0;
+			}
+			catch (ArgsReaderException exception)
+			{
+				Console.Error.WriteLine(exception.Message);
+				return 1;
 			}
 			catch (ApplicationException exception)
 			{

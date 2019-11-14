@@ -9,6 +9,8 @@ namespace GitHubDigestBuilder
 
 		public string Url { get; set; }
 
+		public bool AutoRefresh { get; set; }
+
 		public List<RepoData> Repos { get; } = new List<RepoData>();
 	}
 }
