@@ -63,17 +63,14 @@ namespace GitHubDigestBuilder
 				var apiBase = (settings.GitHub?.ApiUrl ?? "https://api.github.com").TrimEnd('/');
 				var handledEventIds = new HashSet<string>();
 
-				async Task<(IReadOnlyList<JsonElement> Events, DateTime? PreviousDate, bool Failed)> loadEventsAsync(string sourceKind, string sourceName)
+				async Task loadPagesAsync(string url, string id, Func<JsonElement, bool> processPage)
 				{
-					var eventElements = new List<JsonElement>();
-					DateTime? previousDate = null;
-
 					var foundLastPage = false;
 					for (var pageNumber = 1; pageNumber <= 10 && !foundLastPage; pageNumber++)
 					{
 						JsonDocument pageDocument;
 
-						var dumpFile = dumpDirectory != null ? Path.Combine(dumpDirectory, $"{sourceName.Replace('/', '_')}_{pageNumber}.json") : null;
+						var dumpFile = dumpDirectory != null && id != null ? Path.Combine(dumpDirectory, $"{id}_{pageNumber}.json") : null;
 						if (dumpFile != null && File.Exists(dumpFile))
 						{
 							await using var dumpStream = File.OpenRead(dumpFile);
@@ -81,7 +78,8 @@ namespace GitHubDigestBuilder
 						}
 						else
 						{
-							var request = new HttpRequestMessage(HttpMethod.Get, $"{apiBase}/{sourceKind}/{sourceName}/events?page={pageNumber}");
+							var urlHasParams = url.Contains('?');
+							var request = new HttpRequestMessage(HttpMethod.Get, $"{url}{(urlHasParams ? '&' : '?')}page={pageNumber}");
 							var response = await httpClient.SendAsync(request);
 
 							if (response.StatusCode != System.Net.HttpStatusCode.OK)
@@ -98,7 +96,19 @@ namespace GitHubDigestBuilder
 							}
 						}
 
-						foreach (var eventElement in pageDocument.RootElement.EnumerateArray())
+						foundLastPage = processPage(pageDocument.RootElement);
+					}
+				}
+
+				async Task<(IReadOnlyList<JsonElement> Events, DateTime? PreviousDate, bool IsPartial)> loadEventsAsync(string sourceKind, string sourceName)
+				{
+					var eventElements = new List<JsonElement>();
+					DateTime? previousDate = null;
+					var foundLastPage = false;
+
+					await loadPagesAsync($"{apiBase}/{sourceKind}/{sourceName}/events", sourceName.Replace('/', '_'), pageElement =>
+					{
+						foreach (var eventElement in pageElement.EnumerateArray())
 						{
 							var eventId = eventElement.GetProperty("id").GetString();
 							if (!handledEventIds.Add(eventId))
@@ -117,11 +127,12 @@ namespace GitHubDigestBuilder
 								eventElements.Add(eventElement);
 							}
 						}
-					}
+
+						return foundLastPage;
+					});
 
 					eventElements.Reverse();
-
-					return (eventElements, previousDate, foundLastPage);
+					return (eventElements, previousDate, !foundLastPage);
 				}
 
 				var report = new ReportData
@@ -133,165 +144,197 @@ namespace GitHubDigestBuilder
 				};
 
 				var repoSources = settings.Repos ?? new List<RepoSettings>();
+				var repoNames = new List<string>();
 
 				foreach (var repoSource in repoSources)
 				{
-					if (repoSource.Name is string repoName)
+					switch (repoSource)
 					{
-						var (eventElements, previousDate, foundLastPage) = await loadEventsAsync("repos", repoName);
+					case { Name: var name, User: null, Org: null }:
+						repoNames.Add(name);
+						break;
 
-						var repo = new RepoData { Name = repoName, PreviousDate = previousDate, IsPartial = !foundLastPage };
-
-						foreach (var eventElement in eventElements)
+					case { Name: null, User: null, Org: var org }:
+						var orgRepoNames = new List<string>();
+						await loadPagesAsync($"{apiBase}/orgs/{org}/repos?sort=updated", $"org_repos_{org}", pageElement =>
 						{
-							var eventId = eventElement.GetProperty("id").GetString();
+							var foundLastPage = false;
 
-							var actorName = eventElement.GetProperty("actor", "login").GetString();
-							if (repoName != eventElement.GetProperty("repo", "name").GetString())
-								throw new InvalidOperationException($"Unexpected repository in event {eventId}.");
-							var payload = eventElement.GetProperty("payload");
-
-							var eventType = eventElement.GetProperty("type").GetString();
-							if (eventType == "PushEvent")
+							foreach (var repoElement in pageElement.EnumerateArray())
 							{
-								const string branchRefPrefix = "refs/heads/";
-								var refName = payload.TryGetProperty("ref")?.GetString();
-								if (refName?.StartsWith(branchRefPrefix) == true)
-								{
-									var branchName = refName.Substring(branchRefPrefix.Length);
-									var branch = repo.Branches.SingleOrDefault(x => x.Name == branchName);
-									if (branch == null)
-										repo.Branches.Add(branch = new RepoBranchData { Name = branchName, RepoName = repoName });
-
-									var beforeSha = payload.TryGetProperty("before")?.GetString();
-									var afterSha = payload.TryGetProperty("head")?.GetString();
-									var commitCount = payload.TryGetProperty("size")?.GetInt32() ?? 0;
-									var distinctCommitCount = payload.TryGetProperty("distinct_size")?.GetInt32() ?? 0;
-									var commits = payload.TryGetProperty("commits")?.EnumerateArray().ToList() ?? new List<JsonElement>();
-									var canMerge = commitCount == commits.Count;
-
-									var push = branch.Events.LastOrDefault() as PushEventData;
-									if (push == null ||
-										push.ActorName != actorName ||
-										push.BranchName != branchName ||
-										push.AfterSha != beforeSha ||
-										!push.CanMerge ||
-										!canMerge)
-									{
-										push = new PushEventData
-										{
-											Kind = "push",
-											RepoName = repoName,
-											ActorName = actorName,
-											BranchName = branchName,
-											BeforeSha = beforeSha,
-											CanMerge = canMerge,
-										};
-										branch.Events.Add(push);
-									}
-
-									push.AfterSha = afterSha;
-									push.CommitCount += commitCount;
-									push.NewCommitCount += distinctCommitCount;
-
-									foreach (var commit in commits.Where(x => x.TryGetProperty("distinct")?.GetBoolean() == true))
-									{
-										var message = commit.TryGetProperty("message")?.GetString() ?? "";
-										var messageMatch = Regex.Match(message, @"^([^\r\n]*)(.*)$", RegexOptions.Singleline);
-										var subject = messageMatch.Groups[1].Value.Trim();
-										var remarks = Regex.Replace(messageMatch.Groups[2].Value.Trim(), @"\s+", " ");
-
-										push.NewCommits.Add(new CommitData
-										{
-											RepoName = repoName,
-											Sha = commit.GetProperty("sha").GetString(),
-											Subject = subject,
-											Remarks = remarks,
-										});
-									}
-								}
+								var updatedUtc = ParseDateTime(repoElement.GetProperty("updated_at").GetString());
+								if (updatedUtc < startDateTimeUtc)
+									foundLastPage = true;
+								else
+									orgRepoNames.Add(repoElement.GetProperty("full_name").GetString());
 							}
-							else if (eventType == "CreateEvent" || eventType == "DeleteEvent")
+
+							return foundLastPage;
+						});
+						orgRepoNames.Sort(StringComparer.InvariantCulture);
+						repoNames.AddRange(orgRepoNames);
+						break;
+
+					default:
+						throw new ApplicationException("Invalid repo source: " + JsonSerializer.Serialize(repoSource));
+					}
+				}
+
+				foreach (var repoName in repoNames)
+				{
+					var (eventElements, previousDate, isPartial) = await loadEventsAsync("repos", repoName);
+
+					var repo = new RepoData { Name = repoName, PreviousDate = previousDate, IsPartial = isPartial };
+
+					foreach (var eventElement in eventElements)
+					{
+						var eventId = eventElement.GetProperty("id").GetString();
+
+						var actorName = eventElement.GetProperty("actor", "login").GetString();
+						if (repoName != eventElement.GetProperty("repo", "name").GetString())
+							throw new InvalidOperationException($"Unexpected repository in event {eventId}.");
+						var payload = eventElement.GetProperty("payload");
+
+						var eventType = eventElement.GetProperty("type").GetString();
+						if (eventType == "PushEvent")
+						{
+							const string branchRefPrefix = "refs/heads/";
+							var refName = payload.TryGetProperty("ref")?.GetString();
+							if (refName?.StartsWith(branchRefPrefix) == true)
 							{
-								var isDelete = eventType == "DeleteEvent";
+								var branchName = refName.Substring(branchRefPrefix.Length);
+								var branch = repo.Branches.SingleOrDefault(x => x.Name == branchName);
+								if (branch == null)
+									repo.Branches.Add(branch = new RepoBranchData { Name = branchName, RepoName = repoName });
 
-								var refType = payload.GetProperty("ref_type").GetString();
-								if (refType == "branch")
+								var beforeSha = payload.TryGetProperty("before")?.GetString();
+								var afterSha = payload.TryGetProperty("head")?.GetString();
+								var commitCount = payload.TryGetProperty("size")?.GetInt32() ?? 0;
+								var distinctCommitCount = payload.TryGetProperty("distinct_size")?.GetInt32() ?? 0;
+								var commits = payload.TryGetProperty("commits")?.EnumerateArray().ToList() ?? new List<JsonElement>();
+								var canMerge = commitCount == commits.Count;
+
+								var push = branch.Events.LastOrDefault() as PushEventData;
+								if (push == null ||
+									push.ActorName != actorName ||
+									push.BranchName != branchName ||
+									push.AfterSha != beforeSha ||
+									!push.CanMerge ||
+									!canMerge)
 								{
-									var branchName = payload.GetProperty("ref").GetString();
-									var branch = repo.Branches.SingleOrDefault(x => x.Name == branchName);
-									if (branch == null)
-										repo.Branches.Add(branch = new RepoBranchData { Name = branchName, RepoName = repoName });
-
-									branch.Events.Add(new BranchEventData
+									push = new PushEventData
 									{
-										Kind = isDelete ? "delete-branch" : "create-branch",
+										Kind = "push",
 										RepoName = repoName,
 										ActorName = actorName,
 										BranchName = branchName,
-									});
+										BeforeSha = beforeSha,
+										CanMerge = canMerge,
+									};
+									branch.Events.Add(push);
 								}
-								else if (refType == "tag")
+
+								push.AfterSha = afterSha;
+								push.CommitCount += commitCount;
+								push.NewCommitCount += distinctCommitCount;
+
+								foreach (var commit in commits.Where(x => x.TryGetProperty("distinct")?.GetBoolean() == true))
 								{
-									repo.TagEvents.Add(new TagEventData
+									var message = commit.TryGetProperty("message")?.GetString() ?? "";
+									var messageMatch = Regex.Match(message, @"^([^\r\n]*)(.*)$", RegexOptions.Singleline);
+									var subject = messageMatch.Groups[1].Value.Trim();
+									var remarks = Regex.Replace(messageMatch.Groups[2].Value.Trim(), @"\s+", " ");
+
+									push.NewCommits.Add(new CommitData
 									{
-										Kind = isDelete ? "delete-tag" : "create-tag",
 										RepoName = repoName,
-										ActorName = actorName,
-										TagName = payload.GetProperty("ref").GetString(),
+										Sha = commit.GetProperty("sha").GetString(),
+										Subject = subject,
+										Remarks = remarks,
 									});
 								}
 							}
-							else if (eventType == "GollumEvent")
+						}
+						else if (eventType == "CreateEvent" || eventType == "DeleteEvent")
+						{
+							var isDelete = eventType == "DeleteEvent";
+
+							var refType = payload.GetProperty("ref_type").GetString();
+							if (refType == "branch")
 							{
-								foreach (var page in payload.GetProperty("pages").EnumerateArray())
+								var branchName = payload.GetProperty("ref").GetString();
+								var branch = repo.Branches.SingleOrDefault(x => x.Name == branchName);
+								if (branch == null)
+									repo.Branches.Add(branch = new RepoBranchData { Name = branchName, RepoName = repoName });
+
+								branch.Events.Add(new BranchEventData
 								{
-									var action = page.GetProperty("action").GetString();
-									var pageName = page.GetProperty("page_name").GetString();
-									var wikiEvent = repo.WikiEvents.LastOrDefault();
-									if (wikiEvent == null || wikiEvent.ActorName != actorName || wikiEvent.PageName != pageName)
-									{
-										wikiEvent = new WikiEventData
-										{
-											Kind = $"{action}-wiki-page",
-											RepoName = repoName,
-											ActorName = actorName,
-											PageName = pageName,
-										};
-										repo.WikiEvents.Add(wikiEvent);
-									}
-
-									// leave created kind, but use last title
-									wikiEvent.PageTitle = page.GetProperty("title").GetString();
-								}
-							}
-							else if (eventType == "CommitCommentEvent")
-							{
-								var data = payload.GetProperty("comment");
-								var sha = data.GetProperty("commit_id").GetString();
-								var filePath = data.TryGetProperty("path")?.GetString();
-								var fileLineProperty = data.TryGetProperty("line");
-								var fileLine = fileLineProperty == null || fileLineProperty.Value.ValueKind == JsonValueKind.Null ? default(int?) : fileLineProperty.Value.GetInt32();
-
-								var commit = repo.CommentedCommits.SingleOrDefault(x => x.Sha == sha);
-								if (commit == null)
-									repo.CommentedCommits.Add(commit = new CommentedCommitData { RepoName = repoName, Sha = sha });
-
-								var conversation = commit.Conversations.SingleOrDefault(x => x.FilePath == filePath && x.FileLine == fileLine);
-								if (conversation == null)
-									commit.Conversations.Add(conversation = new CommitConversationData { FilePath = filePath, FileLine = fileLine });
-
-								conversation.Comments.Add(new CommitCommentData
-								{
+									Kind = isDelete ? "delete-branch" : "create-branch",
+									RepoName = repoName,
 									ActorName = actorName,
-									Body = data.GetProperty("body").GetString(),
+									BranchName = branchName,
+								});
+							}
+							else if (refType == "tag")
+							{
+								repo.TagEvents.Add(new TagEventData
+								{
+									Kind = isDelete ? "delete-tag" : "create-tag",
+									RepoName = repoName,
+									ActorName = actorName,
+									TagName = payload.GetProperty("ref").GetString(),
 								});
 							}
 						}
+						else if (eventType == "GollumEvent")
+						{
+							foreach (var page in payload.GetProperty("pages").EnumerateArray())
+							{
+								var action = page.GetProperty("action").GetString();
+								var pageName = page.GetProperty("page_name").GetString();
+								var wikiEvent = repo.WikiEvents.LastOrDefault();
+								if (wikiEvent == null || wikiEvent.ActorName != actorName || wikiEvent.PageName != pageName)
+								{
+									wikiEvent = new WikiEventData
+									{
+										Kind = $"{action}-wiki-page",
+										RepoName = repoName,
+										ActorName = actorName,
+										PageName = pageName,
+									};
+									repo.WikiEvents.Add(wikiEvent);
+								}
 
-						if (repo.Branches.Count != 0)
-							report.Repos.Add(repo);
+								// leave created kind, but use last title
+								wikiEvent.PageTitle = page.GetProperty("title").GetString();
+							}
+						}
+						else if (eventType == "CommitCommentEvent")
+						{
+							var data = payload.GetProperty("comment");
+							var sha = data.GetProperty("commit_id").GetString();
+							var filePath = data.TryGetProperty("path")?.GetString();
+							var fileLineProperty = data.TryGetProperty("line");
+							var fileLine = fileLineProperty == null || fileLineProperty.Value.ValueKind == JsonValueKind.Null ? default(int?) : fileLineProperty.Value.GetInt32();
+
+							var commit = repo.CommentedCommits.SingleOrDefault(x => x.Sha == sha);
+							if (commit == null)
+								repo.CommentedCommits.Add(commit = new CommentedCommitData { RepoName = repoName, Sha = sha });
+
+							var conversation = commit.Conversations.SingleOrDefault(x => x.FilePath == filePath && x.FileLine == fileLine);
+							if (conversation == null)
+								commit.Conversations.Add(conversation = new CommitConversationData { FilePath = filePath, FileLine = fileLine });
+
+							conversation.Comments.Add(new CommitCommentData
+							{
+								ActorName = actorName,
+								Body = data.GetProperty("body").GetString(),
+							});
+						}
 					}
+
+					if (repo.Branches.Count != 0)
+						report.Repos.Add(repo);
 				}
 
 				var culture = settings.Culture == null ? CultureInfo.CurrentCulture : CultureInfo.GetCultureInfo(settings.Culture);
