@@ -146,6 +146,28 @@ namespace GitHubDigestBuilder
 				var repoSources = settings.Repos ?? new List<RepoSettings>();
 				var repoNames = new List<string>();
 
+				async Task addReposForSource(string sourceKind, string sourceName)
+				{
+					var orgRepoNames = new List<string>();
+					await loadPagesAsync($"{apiBase}/{sourceKind}/{sourceName}/repos?sort=updated", $"{sourceKind}_{sourceName}_repos", pageElement =>
+					{
+						var foundLastPage = false;
+
+						foreach (var repoElement in pageElement.EnumerateArray())
+						{
+							var updatedUtc = ParseDateTime(repoElement.GetProperty("updated_at").GetString());
+							if (updatedUtc < startDateTimeUtc)
+								foundLastPage = true;
+							else
+								orgRepoNames.Add(repoElement.GetProperty("full_name").GetString());
+						}
+
+						return foundLastPage;
+					});
+					orgRepoNames.Sort(StringComparer.InvariantCulture);
+					repoNames.AddRange(orgRepoNames);
+				}
+
 				foreach (var repoSource in repoSources)
 				{
 					switch (repoSource)
@@ -154,25 +176,12 @@ namespace GitHubDigestBuilder
 						repoNames.Add(name);
 						break;
 
+					case { Name: null, User: var user, Org: null }:
+						await addReposForSource("users", user);
+						break;
+
 					case { Name: null, User: null, Org: var org }:
-						var orgRepoNames = new List<string>();
-						await loadPagesAsync($"{apiBase}/orgs/{org}/repos?sort=updated", $"org_repos_{org}", pageElement =>
-						{
-							var foundLastPage = false;
-
-							foreach (var repoElement in pageElement.EnumerateArray())
-							{
-								var updatedUtc = ParseDateTime(repoElement.GetProperty("updated_at").GetString());
-								if (updatedUtc < startDateTimeUtc)
-									foundLastPage = true;
-								else
-									orgRepoNames.Add(repoElement.GetProperty("full_name").GetString());
-							}
-
-							return foundLastPage;
-						});
-						orgRepoNames.Sort(StringComparer.InvariantCulture);
-						repoNames.AddRange(orgRepoNames);
+						await addReposForSource("orgs", org);
 						break;
 
 					default:
