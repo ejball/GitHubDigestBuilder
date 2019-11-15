@@ -21,6 +21,7 @@ namespace GitHubDigestBuilder
 		{
 			var dateString = args.ReadOption("date");
 			var autoRefresh = args.ReadFlag("auto-refresh");
+			var authToken = args.ReadOption("auth");
 			var configFilePath = args.ReadArgument();
 			args.VerifyComplete();
 
@@ -57,8 +58,9 @@ namespace GitHubDigestBuilder
 				httpClient.DefaultRequestHeaders.UserAgent.Add(ProductInfoHeaderValue.Parse("GitHubDigestBuilder"));
 				httpClient.DefaultRequestHeaders.Accept.Add(MediaTypeWithQualityHeaderValue.Parse("application/vnd.github.v3+json"));
 
-				if (settings.GitHub?.AuthToken is string token)
-					httpClient.DefaultRequestHeaders.Authorization = AuthenticationHeaderValue.Parse($"token {token}");
+				authToken ??= settings.GitHub?.AuthToken;
+				if (!string.IsNullOrWhiteSpace(authToken))
+					httpClient.DefaultRequestHeaders.Authorization = AuthenticationHeaderValue.Parse($"token {authToken}");
 
 				var apiBase = (settings.GitHub?.ApiUrl ?? "https://api.github.com").TrimEnd('/');
 				var handledEventIds = new HashSet<string>();
