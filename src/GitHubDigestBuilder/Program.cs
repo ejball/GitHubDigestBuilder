@@ -100,41 +100,6 @@ namespace GitHubDigestBuilder
 					}
 				}
 
-				async Task<(IReadOnlyList<JsonElement> Events, DateTime? PreviousDate, bool IsPartial)> loadEventsAsync(string sourceKind, string sourceName)
-				{
-					var eventElements = new List<JsonElement>();
-					DateTime? previousDate = null;
-					var foundLastPage = false;
-
-					await loadPagesAsync($"{apiBase}/{sourceKind}/{sourceName}/events", sourceName.Replace('/', '_'), pageElement =>
-					{
-						foreach (var eventElement in pageElement.EnumerateArray())
-						{
-							var eventId = eventElement.GetProperty("id").GetString();
-							if (!handledEventIds.Add(eventId))
-								continue;
-
-							var createdUtc = ParseDateTime(eventElement.GetProperty("created_at").GetString());
-							if (createdUtc < startDateTimeUtc)
-							{
-								foundLastPage = true;
-
-								if (previousDate is null)
-									previousDate = new DateTimeOffset(createdUtc).ToOffset(timeZoneOffset).Date;
-							}
-							else if (createdUtc < endDateTimeUtc)
-							{
-								eventElements.Add(eventElement);
-							}
-						}
-
-						return foundLastPage;
-					});
-
-					eventElements.Reverse();
-					return (eventElements, previousDate, !foundLastPage);
-				}
-
 				var report = new ReportData
 				{
 					Date = date,
@@ -189,6 +154,59 @@ namespace GitHubDigestBuilder
 					}
 				}
 
+				var usersToExclude = new HashSet<string>();
+				foreach (var exclude in settings.Excludes ?? new List<FilterSettings>())
+				{
+					switch (exclude)
+					{
+					case { User: var user }:
+						usersToExclude.Add(user);
+						break;
+
+					default:
+						throw new ApplicationException("Invalid exclude: " + JsonSerializer.Serialize(exclude));
+					}
+				}
+
+				async Task<(IReadOnlyList<JsonElement> Events, DateTime? PreviousDate, bool IsPartial)> loadEventsAsync(string sourceKind, string sourceName)
+				{
+					var eventElements = new List<JsonElement>();
+					DateTime? previousDate = null;
+					var foundLastPage = false;
+
+					await loadPagesAsync($"{apiBase}/{sourceKind}/{sourceName}/events", sourceName.Replace('/', '_'), pageElement =>
+					{
+						foreach (var eventElement in pageElement.EnumerateArray())
+						{
+							var eventId = eventElement.GetProperty("id").GetString();
+							if (!handledEventIds.Add(eventId))
+								continue;
+
+							var actorName = eventElement.GetProperty("actor", "login").GetString();
+							if (usersToExclude.Contains(actorName))
+								continue;
+
+							var createdUtc = ParseDateTime(eventElement.GetProperty("created_at").GetString());
+							if (createdUtc < startDateTimeUtc)
+							{
+								foundLastPage = true;
+
+								if (previousDate is null)
+									previousDate = new DateTimeOffset(createdUtc).ToOffset(timeZoneOffset).Date;
+							}
+							else if (createdUtc < endDateTimeUtc)
+							{
+								eventElements.Add(eventElement);
+							}
+						}
+
+						return foundLastPage;
+					});
+
+					eventElements.Reverse();
+					return (eventElements, previousDate, !foundLastPage);
+				}
+
 				foreach (var repoName in repoNames)
 				{
 					var (eventElements, previousDate, isPartial) = await loadEventsAsync("repos", repoName);
@@ -198,10 +216,10 @@ namespace GitHubDigestBuilder
 					foreach (var eventElement in eventElements)
 					{
 						var eventId = eventElement.GetProperty("id").GetString();
-
-						var actorName = eventElement.GetProperty("actor", "login").GetString();
 						if (repoName != eventElement.GetProperty("repo", "name").GetString())
 							throw new InvalidOperationException($"Unexpected repository in event {eventId}.");
+
+						var actorName = eventElement.GetProperty("actor", "login").GetString();
 						var payload = eventElement.GetProperty("payload");
 
 						var eventType = eventElement.GetProperty("type").GetString();
