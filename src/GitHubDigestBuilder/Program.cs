@@ -65,14 +65,16 @@ namespace GitHubDigestBuilder
 				var apiBase = (settings.GitHub?.ApiUrl ?? "https://api.github.com").TrimEnd('/');
 				var handledEventIds = new HashSet<string>();
 
-				async Task loadPagesAsync(string url, string id, Func<JsonElement, bool> processPage)
+				async Task loadPagesAsync(string url, Func<JsonElement, bool> processPage)
 				{
+					var dumpName = Regex.Replace(Regex.Replace(url, @"\?.*$", ""), @"/+", "_").Trim('_');
+
 					var foundLastPage = false;
 					for (var pageNumber = 1; pageNumber <= 10 && !foundLastPage; pageNumber++)
 					{
 						JsonDocument pageDocument;
 
-						var dumpFile = dumpDirectory != null && id != null ? Path.Combine(dumpDirectory, $"{id}_{pageNumber}.json") : null;
+						var dumpFile = dumpDirectory != null ? Path.Combine(dumpDirectory, $"{dumpName}_{pageNumber}.json") : null;
 						if (dumpFile != null && File.Exists(dumpFile))
 						{
 							await using var dumpStream = File.OpenRead(dumpFile);
@@ -81,7 +83,7 @@ namespace GitHubDigestBuilder
 						else
 						{
 							var urlHasParams = url.Contains('?');
-							var request = new HttpRequestMessage(HttpMethod.Get, $"{url}{(urlHasParams ? '&' : '?')}page={pageNumber}");
+							var request = new HttpRequestMessage(HttpMethod.Get, $"{apiBase}/{url}{(urlHasParams ? '&' : '?')}page={pageNumber}");
 							var response = await httpClient.SendAsync(request);
 
 							if (response.StatusCode != System.Net.HttpStatusCode.OK)
@@ -116,7 +118,7 @@ namespace GitHubDigestBuilder
 				async Task addReposForSource(string sourceKind, string sourceName)
 				{
 					var orgRepoNames = new List<string>();
-					await loadPagesAsync($"{apiBase}/{sourceKind}/{sourceName}/repos?sort=updated", $"{sourceKind}_{sourceName}_repos", pageElement =>
+					await loadPagesAsync($"{sourceKind}/{sourceName}/repos?sort=updated", pageElement =>
 					{
 						var foundLastPage = false;
 
@@ -176,7 +178,7 @@ namespace GitHubDigestBuilder
 					DateTime? previousDate = null;
 					var foundLastPage = false;
 
-					await loadPagesAsync($"{apiBase}/{sourceKind}/{sourceName}/events", sourceName.Replace('/', '_'), pageElement =>
+					await loadPagesAsync($"{sourceKind}/{sourceName}/events", pageElement =>
 					{
 						foreach (var eventElement in pageElement.EnumerateArray())
 						{
