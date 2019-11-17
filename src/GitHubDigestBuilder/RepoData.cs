@@ -11,7 +11,7 @@ namespace GitHubDigestBuilder
 
 		public bool IsPartial { get; set; }
 
-		public List<RepoBranchData> Branches { get; } = new List<RepoBranchData>();
+		public List<BranchData> Branches { get; } = new List<BranchData>();
 
 		public List<TagEventData> TagEvents { get; } = new List<TagEventData>();
 

@@ -112,8 +112,8 @@ namespace GitHubDigestBuilder
 					AutoRefresh = autoRefresh,
 				};
 
-				var repoSources = settings.Repos ?? new List<RepoSettings>();
-				var repoNames = new List<string>();
+				var sourceRepos = settings.Repos ?? new List<RepoSettings>();
+				var sourceRepoNames = new List<string>();
 
 				async Task addReposForSource(string sourceKind, string sourceName)
 				{
@@ -134,15 +134,15 @@ namespace GitHubDigestBuilder
 						return foundLastPage;
 					});
 					orgRepoNames.Sort(StringComparer.InvariantCulture);
-					repoNames.AddRange(orgRepoNames);
+					sourceRepoNames.AddRange(orgRepoNames);
 				}
 
-				foreach (var repoSource in repoSources)
+				foreach (var sourceRepo in sourceRepos)
 				{
-					switch (repoSource)
+					switch (sourceRepo)
 					{
 					case { Name: var name, User: null, Org: null }:
-						repoNames.Add(name);
+						sourceRepoNames.Add(name);
 						break;
 
 					case { Name: null, User: var user, Org: null }:
@@ -154,7 +154,7 @@ namespace GitHubDigestBuilder
 						break;
 
 					default:
-						throw new ApplicationException("Invalid repo source: " + JsonSerializer.Serialize(repoSource));
+						throw new ApplicationException("Invalid repo source: " + JsonSerializer.Serialize(sourceRepo));
 					}
 				}
 
@@ -176,32 +176,33 @@ namespace GitHubDigestBuilder
 				{
 					var eventElements = new List<JsonElement>();
 					DateTime? previousDate = null;
-					var foundLastPage = false;
+					var foundLastPage = true;
 
 					await loadPagesAsync($"{sourceKind}/{sourceName}/events", pageElement =>
 					{
-						foreach (var eventElement in pageElement.EnumerateArray())
+						if (pageElement.GetArrayLength() != 0)
 						{
-							var eventId = eventElement.GetProperty("id").GetString();
-							if (!handledEventIds.Add(eventId))
-								continue;
-
-							var actorName = eventElement.GetProperty("actor", "login").GetString();
-							if (usersToExclude.Contains(actorName))
-								continue;
-
-							var createdUtc = ParseDateTime(eventElement.GetProperty("created_at").GetString());
-							if (createdUtc < startDateTimeUtc)
+							foreach (var eventElement in pageElement.EnumerateArray())
 							{
-								foundLastPage = true;
-
-								if (previousDate is null)
-									previousDate = new DateTimeOffset(createdUtc).ToOffset(timeZoneOffset).Date;
+								var createdUtc = ParseDateTime(eventElement.GetProperty("created_at").GetString());
+								if (createdUtc < startDateTimeUtc)
+								{
+									foundLastPage = true;
+									if (previousDate is null)
+										previousDate = new DateTimeOffset(createdUtc).ToOffset(timeZoneOffset).Date;
+								}
+								else if (createdUtc < endDateTimeUtc)
+								{
+									var eventId = eventElement.GetProperty("id").GetString();
+									var actorName = eventElement.GetProperty("actor", "login").GetString();
+									if (handledEventIds.Add(eventId) && !usersToExclude.Contains(actorName))
+										eventElements.Add(eventElement);
+								}
 							}
-							else if (createdUtc < endDateTimeUtc)
-							{
-								eventElements.Add(eventElement);
-							}
+						}
+						else
+						{
+							foundLastPage = true;
 						}
 
 						return foundLastPage;
@@ -211,17 +212,32 @@ namespace GitHubDigestBuilder
 					return (eventElements, previousDate, !foundLastPage);
 				}
 
-				foreach (var repoName in repoNames)
+				foreach (var sourceRepoName in sourceRepoNames)
 				{
-					var (eventElements, previousDate, isPartial) = await loadEventsAsync("repos", repoName);
+					var (eventElements, previousDate, isPartial) = await loadEventsAsync("networks", sourceRepoName);
 
-					var repo = new RepoData { Name = repoName, PreviousDate = previousDate, IsPartial = isPartial };
+					var repo = new RepoData { Name = sourceRepoName, PreviousDate = previousDate, IsPartial = isPartial };
 
 					foreach (var eventElement in eventElements)
 					{
-						var eventId = eventElement.GetProperty("id").GetString();
-						if (repoName != eventElement.GetProperty("repo", "name").GetString())
-							throw new InvalidOperationException($"Unexpected repository in event {eventId}.");
+						var repoName = eventElement.GetProperty("repo", "name").GetString();
+
+						string getForkOwner(string r) => sourceRepoName == r ? null : r.Substring(0, r.IndexOf('/'));
+
+						BranchData addBranch(string n, string r)
+						{
+							var branch = new BranchData
+							{
+								Name = n,
+								RepoName = r,
+								ForkOwner = getForkOwner(r)
+							};
+							repo.Branches.Add(branch);
+							return branch;
+						}
+
+						BranchData getOrAddBranch(string n, string r) =>
+							repo.Branches.LastOrDefault(x => x.Name == n && x.RepoName == r) ?? addBranch(n, r);
 
 						var actorName = eventElement.GetProperty("actor", "login").GetString();
 						var payload = eventElement.GetProperty("payload");
@@ -234,9 +250,7 @@ namespace GitHubDigestBuilder
 							if (refName?.StartsWith(branchRefPrefix) == true)
 							{
 								var branchName = refName.Substring(branchRefPrefix.Length);
-								var branch = repo.Branches.SingleOrDefault(x => x.Name == branchName);
-								if (branch == null)
-									repo.Branches.Add(branch = new RepoBranchData { Name = branchName, RepoName = repoName });
+								var branch = getOrAddBranch(branchName, repoName);
 
 								var beforeSha = payload.TryGetProperty("before")?.GetString();
 								var afterSha = payload.TryGetProperty("head")?.GetString();
@@ -294,16 +308,13 @@ namespace GitHubDigestBuilder
 							if (refType == "branch")
 							{
 								var branchName = payload.GetProperty("ref").GetString();
-								var branch = repo.Branches.SingleOrDefault(x => x.Name == branchName);
-								if (branch == null)
-									repo.Branches.Add(branch = new RepoBranchData { Name = branchName, RepoName = repoName });
+								var branch = getOrAddBranch(branchName, repoName);
 
 								branch.Events.Add(new BranchEventData
 								{
 									Kind = isDelete ? "delete-branch" : "create-branch",
 									RepoName = repoName,
 									ActorName = actorName,
-									BranchName = branchName,
 								});
 							}
 							else if (refType == "tag")
@@ -361,6 +372,51 @@ namespace GitHubDigestBuilder
 								ActorName = actorName,
 								Body = data.GetProperty("body").GetString(),
 							});
+						}
+						else if (eventType == "PullRequestEvent")
+						{
+							var number = payload.GetProperty("number").GetInt32();
+
+							var branchName = payload.GetProperty("pull_request", "head", "ref").GetString();
+							var headRepoName = payload.GetProperty("pull_request", "head", "repo", "full_name").GetString();
+							var branch = getOrAddBranch(branchName, headRepoName);
+
+							if (branch.PullRequest != null && branch.PullRequest.Number != number)
+								branch = addBranch(branchName, headRepoName);
+
+							branch.PullRequest = new PullRequestData
+							{
+								Number = number,
+								Title = payload.GetProperty("pull_request", "title").GetString(),
+								RepoName = repoName,
+							};
+
+							var action = payload.GetProperty("action").GetString();
+							if (action == "opened" || action == "edited" || action == "closed")
+							{
+								BranchData baseBranch = null;
+
+								if (action == "closed" && payload.GetProperty("pull_request", "merged").GetBoolean())
+								{
+									action = "merged";
+
+									var baseBranchName = payload.GetProperty("pull_request", "base", "ref").GetString();
+
+									var baseRepoName = payload.GetProperty("pull_request", "base", "repo", "full_name").GetString();
+									if (repoName != baseRepoName)
+										throw new InvalidOperationException("Unexpected pull request base.");
+
+									baseBranch = new BranchData { Name = baseBranchName, RepoName = repoName };
+								}
+
+								branch.Events.Add(new BranchEventData
+								{
+									Kind = $"pull-request-{action}",
+									RepoName = branch.RepoName,
+									ActorName = actorName,
+									BaseBranch = baseBranch,
+								});
+							}
 						}
 					}
 

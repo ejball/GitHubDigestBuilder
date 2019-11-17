@@ -24,7 +24,12 @@ a:hover, a:focus { text-decoration: none }
 {{- end # func ~}}
 
 {{- func branch_link -}}
-<code><a href="{{ base_url }}/{{ $0.repo_name }}/tree/{{ $0.name | html.escape }}">{{ $0.name | html.escape }}</a></code>
+<a href="{{ base_url }}/{{ $0.repo_name }}/tree/{{ $0.name | html.escape }}">
+{{- if $0.fork_owner }}{{ $0.fork_owner | html.escape }}:{{ end }}{{ $0.name | html.escape }}</a>
+{{- end # func ~}}
+
+{{- func pull_request_link -}}
+<a href="{{ base_url }}/{{ $0.repo_name }}/pull/{{ $0.number }}">#{{ $0.number }}</a></code>
 {{- end # func ~}}
 
 {{- func tag_link -}}
@@ -69,7 +74,12 @@ a:hover, a:focus { text-decoration: none }
 <div class="ml-4">
 
 {{ for branch in repo.branches ~}}
+{{ if branch.pull_request ~}}
+<h5 id="{{ repo.name | string.handleize }}-{{ branch.pull_request.number }}" data-toc-text="PR #{{ branch.pull_request.number }}">{{ branch.pull_request | pull_request_link }} <small class="text-muted">pull request</small></h5>
+<p class="ml-4 mb-1 font-italic">{{ branch.pull_request.title | html.escape }}</p>
+{{ else ~}}
 <h5 id="{{ repo.name | string.handleize }}-{{ branch.name | string.handleize }}" data-toc-text="{{ branch.name | html.escape }}">{{ branch | branch_link }} <small class="text-muted">branch</small></h5>
+{{ end # if branch.pull_request ~}}
 {{ if !branch.events.empty? ~}}
 <ul class="list-unstyled ml-4">
 {{ for event in branch.events ~}}
@@ -83,10 +93,20 @@ a:hover, a:focus { text-decoration: none }
 </ul>
 {{ end #if ~}}
 </li>
-{{ else if event.kind == 'create-branch' }}
+{{ else if event.kind == 'create-branch' ~}}
 <li class="text-truncate">{{ event.actor_name | user_link }} created branch</li>
-{{ else if event.kind == 'delete-branch' }}
+{{ else if event.kind == 'delete-branch' ~}}
 <li class="text-truncate">{{ event.actor_name | user_link }} deleted branch</li>
+{{ else if event.kind == 'pull-request-opened' ~}}
+<li class="text-truncate">{{ event.actor_name | user_link }} opened pull request</li>
+{{ else if event.kind == 'pull-request-edited' ~}}
+<li class="text-truncate">{{ event.actor_name | user_link }} edited pull request</li>
+{{ else if event.kind == 'pull-request-merged' ~}}
+<li class="text-truncate">{{ event.actor_name | user_link }} merged pull request into {{ event.base_branch | branch_link }}</li>
+{{ else if event.kind == 'pull-request-closed' ~}}
+<li class="text-truncate">{{ event.actor_name | user_link }} closed pull request</li>
+{{ else ~}}
+<li class="text-truncate">{{ event.actor_name | user_link }} <code>{{ event.kind }}</code></li>
 {{ end # if event.kind ~}}
 {{ end # for event ~}}
 </ul>
@@ -97,10 +117,12 @@ a:hover, a:focus { text-decoration: none }
 <h5 id="{{ repo.name | string.handleize }}-tags">tags</h5>
 <ul class="list-unstyled ml-4">
 {{ for event in repo.tag_events ~}}
-{{ if event.kind == 'create-tag' }}
+{{ if event.kind == 'create-tag' ~}}
 <li class="text-truncate">{{ event.actor_name | user_link }} created tag {{ event | tag_link }}</li>
-{{ else if event.kind == 'delete-tag' }}
+{{ else if event.kind == 'delete-tag' ~}}
 <li class="text-truncate">{{ event.actor_name | user_link }} deleted tag {{ event | tag_link }}</li>
+{{ else ~}}
+<li class="text-truncate">{{ event.actor_name | user_link }} <code>{{ event.kind }}</code></li>
 {{ end # if event.kind ~}}
 {{ end # for event ~}}
 </ul>
@@ -110,10 +132,12 @@ a:hover, a:focus { text-decoration: none }
 <h5 id="{{ repo.name | string.handleize }}-wiki">wiki</h5>
 <ul class="list-unstyled ml-4">
 {{ for event in repo.wiki_events ~}}
-{{ if event.kind == 'created-wiki-page' }}
+{{ if event.kind == 'created-wiki-page' ~}}
 <li class="text-truncate">{{ event.actor_name | user_link }} created {{ event | wiki_link }}</li>
-{{ else if event.kind == 'edited-wiki-page' }}
+{{ else if event.kind == 'edited-wiki-page' ~}}
 <li class="text-truncate">{{ event.actor_name | user_link }} edited {{ event | wiki_link }}</li>
+{{ else ~}}
+<li class="text-truncate">{{ event.actor_name | user_link }} <code>{{ event.kind }}</code></li>
 {{ end # if event.kind ~}}
 {{ end # for event ~}}
 </ul>
