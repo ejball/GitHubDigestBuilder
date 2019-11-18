@@ -158,7 +158,7 @@ a:hover, a:focus { text-decoration: none }
 <ul class="list-unstyled ml-4">
 {{ end # if }}
 {{ for comment in conversation.comments ~}}
-<li class="text-truncate">{{ comment.actor_name | user_link }}: {{ comment.body | html.escape }}</li>
+<li class="text-truncate">{{ comment.actor_name | user_link }} <a href="{{ comment.url }}" class="text-secondary">&#x21D2;</a> {{ comment.body | html.escape }}</li>
 {{ end # for comment ~}}
 {{ if conversation.file_path ~}}
 </ul>

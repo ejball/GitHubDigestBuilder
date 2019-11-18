@@ -104,11 +104,12 @@ namespace GitHubDigestBuilder
 					}
 				}
 
+				var baseUrl = (settings.GitHub?.WebUrl ?? "https://github.com").TrimEnd('/');
 				var report = new ReportData
 				{
 					Date = date,
 					PreviousDate = date.AddDays(-1),
-					BaseUrl = (settings.GitHub?.WebUrl ?? "https://github.com").TrimEnd('/'),
+					BaseUrl = baseUrl,
 					AutoRefresh = autoRefresh,
 				};
 
@@ -354,6 +355,7 @@ namespace GitHubDigestBuilder
 						else if (eventType == "CommitCommentEvent")
 						{
 							var data = payload.GetProperty("comment");
+							var commentId = data.GetProperty("id").GetInt32();
 							var sha = data.GetProperty("commit_id").GetString();
 							var filePath = data.TryGetProperty("path")?.GetString();
 							var fileLineProperty = data.TryGetProperty("line");
@@ -370,6 +372,7 @@ namespace GitHubDigestBuilder
 							conversation.Comments.Add(new CommitCommentData
 							{
 								ActorName = actorName,
+								Url = $"{baseUrl}/{repoName}/commit/{sha}#{(filePath == null ? "commitcomment-" : "r")}{commentId}",
 								Body = data.GetProperty("body").GetString(),
 							});
 						}
