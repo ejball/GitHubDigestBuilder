@@ -421,7 +421,17 @@ namespace GitHubDigestBuilder
 					}
 
 					if (repo.Branches.Count != 0)
+					{
+						var sortedBranches = repo.Branches
+							.OrderBy(x => x.PullRequest != null ? 1 : x.ForkOwner == null ? 2 : 3)
+							.ThenBy(x => x.PullRequest?.Number ?? 0)
+							.ThenBy(x => x.ForkOwner ?? "", StringComparer.InvariantCulture)
+							.ToList();
+						repo.Branches.Clear();
+						repo.Branches.AddRange(sortedBranches);
+
 						report.Repos.Add(repo);
+					}
 				}
 
 				var culture = settings.Culture == null ? CultureInfo.CurrentCulture : CultureInfo.GetCultureInfo(settings.Culture);
