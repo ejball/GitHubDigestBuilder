@@ -154,7 +154,7 @@ a:hover, a:focus { text-decoration: none }
 <ul class="list-unstyled ml-4">
 {{ for conversation in commit.conversations ~}}
 {{ if conversation.file_path ~}}
-<li class="text-truncate"><code>{{ conversation.file_path | html.escape }}</code> (line {{ conversation.file_line }})
+<li class="text-truncate"><code>{{ conversation.file_path | html.escape }}</code>
 <ul class="list-unstyled ml-4">
 {{ end # if }}
 {{ for comment in conversation.comments ~}}
