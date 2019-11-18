@@ -70,6 +70,9 @@ a:hover, a:focus { text-decoration: none }
 
 {{ for repo in repos ~}}
 <h4 id="{{ repo.name | string.handleize }}" data-toc-text="{{ repo.name | html.escape }}">{{ repo | repo_link }} <small class="text-muted">repository</small></h4>
+{{ if repo.is_partial # if ~}}
+<p class="ml-4 mb-1 small">(partial results; too much activity)</p>
+{{ end # if ~}}
 
 <div class="ml-4">
 
