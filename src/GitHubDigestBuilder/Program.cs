@@ -9,6 +9,8 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using ArgsReading;
+using GitHubDigestBuilder.Models;
+using GitHubDigestBuilder.Settings;
 using Scriban;
 using Scriban.Runtime;
 using YamlDotNet.Serialization;

@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace GitHubDigestBuilder
+namespace GitHubDigestBuilder.Settings
 {
 	public sealed class DigestSettings
 	{

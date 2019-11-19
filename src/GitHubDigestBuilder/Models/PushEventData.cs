@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace GitHubDigestBuilder
+namespace GitHubDigestBuilder.Models
 {
 	internal sealed class PushEventData : EventData
 	{

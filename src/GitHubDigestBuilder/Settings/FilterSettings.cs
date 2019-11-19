@@ -1,4 +1,4 @@
-namespace GitHubDigestBuilder
+namespace GitHubDigestBuilder.Settings
 {
 	public sealed class FilterSettings
 	{

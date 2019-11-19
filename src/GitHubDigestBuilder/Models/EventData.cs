@@ -1,4 +1,4 @@
-namespace GitHubDigestBuilder
+namespace GitHubDigestBuilder.Models
 {
 	internal abstract class EventData
 	{
