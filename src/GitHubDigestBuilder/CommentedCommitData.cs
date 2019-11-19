@@ -8,6 +8,6 @@ namespace GitHubDigestBuilder
 
 		public string Sha { get; set; }
 
-		public List<CommitConversationData> Conversations { get; } = new List<CommitConversationData>();
+		public List<ConversationData> Conversations { get; } = new List<ConversationData>();
 	}
 }

@@ -102,12 +102,18 @@ a:hover, a:focus { text-decoration: none }
 <li class="text-truncate">{{ event.actor_name | user_link }} deleted branch</li>
 {{ else if event.kind == 'pull-request-opened' ~}}
 <li class="text-truncate">{{ event.actor_name | user_link }} opened pull request</li>
-{{ else if event.kind == 'pull-request-edited' ~}}
-<li class="text-truncate">{{ event.actor_name | user_link }} edited pull request</li>
 {{ else if event.kind == 'pull-request-merged' ~}}
 <li class="text-truncate">{{ event.actor_name | user_link }} merged pull request into {{ event.base_branch | branch_link }}</li>
 {{ else if event.kind == 'pull-request-closed' ~}}
 <li class="text-truncate">{{ event.actor_name | user_link }} closed pull request</li>
+{{ else if event.kind == 'pull-request-review-comment-created' ~}}
+<li class="text-truncate"><a href="{{ event.conversation.comments[0].url }}"><code>{{ event.conversation.file_path | html.escape }}</code></a>
+<ul class="list-unstyled ml-4">
+{{ for comment in event.conversation.comments ~}}
+<li class="text-truncate">{{ comment.actor_name | user_link }} <a href="{{ comment.url }}" class="text-secondary">&#x21D2;</a> {{ comment.body | html.escape }}</li>
+{{ end # for comment ~}}
+</ul>
+</li>
 {{ else ~}}
 <li class="text-truncate">{{ event.actor_name | user_link }} <code>{{ event.kind }}</code></li>
 {{ end # if event.kind ~}}
@@ -154,7 +160,7 @@ a:hover, a:focus { text-decoration: none }
 <ul class="list-unstyled ml-4">
 {{ for conversation in commit.conversations ~}}
 {{ if conversation.file_path ~}}
-<li class="text-truncate"><code>{{ conversation.file_path | html.escape }}</code>
+<li class="text-truncate"><a href="{{ conversation.comments[0].url }}"><code>{{ conversation.file_path | html.escape }}</code></a>
 <ul class="list-unstyled ml-4">
 {{ end # if }}
 {{ for comment in conversation.comments ~}}

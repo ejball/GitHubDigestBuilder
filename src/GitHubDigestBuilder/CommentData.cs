@@ -1,6 +1,6 @@
 namespace GitHubDigestBuilder
 {
-	internal sealed class CommitCommentData
+	internal sealed class CommentData
 	{
 		public string ActorName { get; set; }
 

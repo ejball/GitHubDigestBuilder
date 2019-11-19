@@ -1,4 +1,4 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 
 namespace GitHubDigestBuilder
 {
@@ -22,5 +22,7 @@ namespace GitHubDigestBuilder
 
 			return element;
 		}
+
+		public static int? GetNullOrInt32(this JsonElement element) => element.ValueKind == JsonValueKind.Null ? default(int?) : element.GetInt32();
 	}
 }
