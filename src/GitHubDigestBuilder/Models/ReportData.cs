@@ -14,5 +14,7 @@ namespace GitHubDigestBuilder.Models
 		public bool AutoRefresh { get; set; }
 
 		public List<RepoData> Repos { get; } = new List<RepoData>();
+
+		public List<string> Warnings { get; } = new List<string>();
 	}
 }

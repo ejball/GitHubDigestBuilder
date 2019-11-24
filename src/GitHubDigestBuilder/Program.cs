@@ -213,12 +213,19 @@ namespace GitHubDigestBuilder
 				}
 
 				var eventElements = new List<JsonElement>();
+				var warnings = new List<string>();
 
 				foreach (var sourceRepoName in sourceRepoNames)
 				{
-					// TODO: record warning when partial
 					var (repoEventElements, isPartial) = await loadEventsAsync("networks", sourceRepoName);
 					eventElements.AddRange(repoEventElements);
+
+					if (isPartial)
+					{
+						(repoEventElements, isPartial) = await loadEventsAsync("repos", sourceRepoName);
+						eventElements.AddRange(repoEventElements);
+						warnings.Add($"{sourceRepoName} {(isPartial ? "repository" : "repository network")} had too much activity.");
+					}
 				}
 
 				eventElements = eventElements.OrderBy(x => ParseDateTime(x.GetProperty("created_at").GetString())).ToList();
@@ -516,6 +523,7 @@ namespace GitHubDigestBuilder
 				};
 
 				report.Repos.AddRange(repos.OrderBy(x => x.Name, StringComparer.InvariantCulture));
+				report.Warnings.AddRange(warnings);
 
 				var culture = settings.Culture == null ? CultureInfo.CurrentCulture : CultureInfo.GetCultureInfo(settings.Culture);
 
