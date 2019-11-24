@@ -175,10 +175,9 @@ namespace GitHubDigestBuilder
 					}
 				}
 
-				async Task<(IReadOnlyList<JsonElement> Events, DateTime? PreviousDate, bool IsPartial)> loadEventsAsync(string sourceKind, string sourceName)
+				async Task<(IReadOnlyList<JsonElement> Events, bool IsPartial)> loadEventsAsync(string sourceKind, string sourceName)
 				{
 					var eventElements = new List<JsonElement>();
-					DateTime? previousDate = null;
 					var foundLastPage = true;
 
 					await loadPagesAsync($"{sourceKind}/{sourceName}/events", pageElement =>
@@ -191,8 +190,6 @@ namespace GitHubDigestBuilder
 								if (createdUtc < startDateTimeUtc)
 								{
 									foundLastPage = true;
-									if (previousDate is null)
-										previousDate = new DateTimeOffset(createdUtc).ToOffset(timeZoneOffset).Date;
 								}
 								else if (createdUtc < endDateTimeUtc)
 								{
@@ -212,7 +209,7 @@ namespace GitHubDigestBuilder
 					});
 
 					eventElements.Reverse();
-					return (eventElements, previousDate, !foundLastPage);
+					return (eventElements, !foundLastPage);
 				}
 
 				var branches = new List<BranchData>();
@@ -223,7 +220,7 @@ namespace GitHubDigestBuilder
 				foreach (var sourceRepoName in sourceRepoNames)
 				{
 					// TODO: record warning when partial
-					var (eventElements, previousDate, isPartial) = await loadEventsAsync("networks", sourceRepoName);
+					var (eventElements, isPartial) = await loadEventsAsync("networks", sourceRepoName);
 
 					foreach (var eventElement in eventElements)
 					{
