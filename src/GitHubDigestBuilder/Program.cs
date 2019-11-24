@@ -39,10 +39,8 @@ namespace GitHubDigestBuilder
 			var timeZoneOffset = settings.TimeZoneOffsetHours != null ? TimeSpan.FromHours(settings.TimeZoneOffsetHours.Value) : DateTimeOffset.Now.Offset;
 			var date = dateString != null ? ParseDate(dateString) : new DateTimeOffset(DateTime.UtcNow).ToOffset(timeZoneOffset).Date.AddDays(-1.0);
 			var dateIso = date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
-			var startDateTime = new DateTimeOffset(date.Year, date.Month, date.Day, 0, 0, 0, timeZoneOffset);
-			var startDateTimeUtc = startDateTime.UtcDateTime;
-			var endDateTime = startDateTime.AddDays(1.0);
-			var endDateTimeUtc = endDateTime.UtcDateTime;
+			var startDateTimeUtc = new DateTimeOffset(date.Year, date.Month, date.Day, 0, 0, 0, timeZoneOffset).UtcDateTime;
+			var endDateTimeUtc = startDateTimeUtc.AddDays(1.0);
 
 			var outputFile = Path.Combine(configFileDirectory, settings.OutputDirectory ?? ".", $"{dateIso}.html");
 			Directory.CreateDirectory(Path.GetDirectoryName(outputFile));
@@ -107,13 +105,6 @@ namespace GitHubDigestBuilder
 				}
 
 				var baseUrl = (settings.GitHub?.WebUrl ?? "https://github.com").TrimEnd('/');
-				var report = new ReportData
-				{
-					Date = date,
-					PreviousDate = date.AddDays(-1),
-					BaseUrl = baseUrl,
-					AutoRefresh = autoRefresh,
-				};
 
 				var sourceRepos = settings.Repos ?? new List<RepoSettings>();
 				var sourceRepoNames = new List<string>();
@@ -136,7 +127,6 @@ namespace GitHubDigestBuilder
 
 						return foundLastPage;
 					});
-					orgRepoNames.Sort(StringComparer.InvariantCulture);
 					sourceRepoNames.AddRange(orgRepoNames);
 				}
 
@@ -215,17 +205,19 @@ namespace GitHubDigestBuilder
 					return (eventElements, previousDate, !foundLastPage);
 				}
 
+				var branches = new List<BranchData>();
+				var tagEvents = new List<TagEventData>();
+				var wikiEvents = new List<WikiEventData>();
+				var commentedCommits = new List<CommentedCommitData>();
+
 				foreach (var sourceRepoName in sourceRepoNames)
 				{
+					// TODO: record warning when partial
 					var (eventElements, previousDate, isPartial) = await loadEventsAsync("networks", sourceRepoName);
-
-					var repo = new RepoData { Name = sourceRepoName, PreviousDate = previousDate, IsPartial = isPartial };
 
 					foreach (var eventElement in eventElements)
 					{
 						var repoName = eventElement.GetProperty("repo", "name").GetString();
-
-						string getForkOwner(string r) => sourceRepoName == r ? null : r.Substring(0, r.IndexOf('/'));
 
 						BranchData addBranch(string n, string r)
 						{
@@ -233,14 +225,13 @@ namespace GitHubDigestBuilder
 							{
 								Name = n,
 								RepoName = r,
-								ForkOwner = getForkOwner(r)
 							};
-							repo.Branches.Add(branch);
+							branches.Add(branch);
 							return branch;
 						}
 
 						BranchData getOrAddBranch(string n, string r) =>
-							repo.Branches.LastOrDefault(x => x.Name == n && x.RepoName == r) ?? addBranch(n, r);
+							branches.LastOrDefault(x => x.Name == n && x.RepoName == r) ?? addBranch(n, r);
 
 						var actorName = eventElement.GetProperty("actor", "login").GetString();
 						var payload = eventElement.GetProperty("payload");
@@ -322,7 +313,7 @@ namespace GitHubDigestBuilder
 							}
 							else if (refType == "tag")
 							{
-								repo.TagEvents.Add(new TagEventData
+								tagEvents.Add(new TagEventData
 								{
 									Kind = isDelete ? "delete-tag" : "create-tag",
 									RepoName = repoName,
@@ -337,7 +328,7 @@ namespace GitHubDigestBuilder
 							{
 								var action = page.GetProperty("action").GetString();
 								var pageName = page.GetProperty("page_name").GetString();
-								var wikiEvent = repo.WikiEvents.LastOrDefault();
+								var wikiEvent = wikiEvents.LastOrDefault();
 								if (wikiEvent == null || wikiEvent.ActorName != actorName || wikiEvent.PageName != pageName)
 								{
 									wikiEvent = new WikiEventData
@@ -347,7 +338,7 @@ namespace GitHubDigestBuilder
 										ActorName = actorName,
 										PageName = pageName,
 									};
-									repo.WikiEvents.Add(wikiEvent);
+									wikiEvents.Add(wikiEvent);
 								}
 
 								// leave created kind, but use last title
@@ -362,9 +353,9 @@ namespace GitHubDigestBuilder
 							var filePath = data.TryGetProperty("path")?.GetString();
 							var position = data.TryGetProperty("position")?.GetNullOrInt32();
 
-							var commit = repo.CommentedCommits.SingleOrDefault(x => x.Sha == sha);
+							var commit = commentedCommits.SingleOrDefault(x => x.Sha == sha);
 							if (commit == null)
-								repo.CommentedCommits.Add(commit = new CommentedCommitData { RepoName = repoName, Sha = sha });
+								commentedCommits.Add(commit = new CommentedCommitData { RepoName = repoName, Sha = sha });
 
 							var conversation = commit.Conversations.SingleOrDefault(x => x.FilePath == filePath && x.Position == position?.ToString());
 							if (conversation == null)
@@ -388,6 +379,7 @@ namespace GitHubDigestBuilder
 							if (branch.PullRequest != null && branch.PullRequest.Number != number)
 								branch = addBranch(branchName, headRepoName);
 
+							branch.RepoName = repoName;
 							branch.PullRequest = new PullRequestData
 							{
 								Number = number,
@@ -470,20 +462,48 @@ namespace GitHubDigestBuilder
 							}
 						}
 					}
-
-					if (repo.Branches.Count != 0)
-					{
-						var sortedBranches = repo.Branches
-							.OrderBy(x => x.PullRequest != null ? 1 : x.ForkOwner == null ? 2 : 3)
-							.ThenBy(x => x.PullRequest?.Number ?? 0)
-							.ThenBy(x => x.ForkOwner ?? "", StringComparer.InvariantCulture)
-							.ToList();
-						repo.Branches.Clear();
-						repo.Branches.AddRange(sortedBranches);
-
-						report.Repos.Add(repo);
-					}
 				}
+
+				var repos = new List<RepoData>();
+
+				RepoData getOrAddRepo(string n)
+				{
+					var repo = repos.LastOrDefault(x => x.Name == n);
+					if (repo == null)
+					{
+						repo = new RepoData { Name = n };
+						repos.Add(repo);
+					}
+
+					return repo;
+				}
+
+				foreach (var branch in branches
+					.OrderBy(x => x.PullRequest != null ? 1 : x.ForkOwner == null ? 2 : 3)
+					.ThenBy(x => x.PullRequest?.Number ?? 0)
+					.ThenBy(x => x.ForkOwner ?? "", StringComparer.InvariantCulture))
+				{
+					getOrAddRepo(branch.RepoName).Branches.Add(branch);
+				}
+
+				foreach (var tagEvent in tagEvents)
+					getOrAddRepo(tagEvent.RepoName).TagEvents.Add(tagEvent);
+
+				foreach (var wikiEvent in wikiEvents)
+					getOrAddRepo(wikiEvent.RepoName).WikiEvents.Add(wikiEvent);
+
+				foreach (var commentedCommit in commentedCommits)
+					getOrAddRepo(commentedCommit.RepoName).CommentedCommits.Add(commentedCommit);
+
+				var report = new ReportData
+				{
+					Date = date,
+					PreviousDate = date.AddDays(-1),
+					BaseUrl = baseUrl,
+					AutoRefresh = autoRefresh,
+				};
+
+				report.Repos.AddRange(repos.OrderBy(x => x.Name, StringComparer.InvariantCulture));
 
 				var culture = settings.Culture == null ? CultureInfo.CurrentCulture : CultureInfo.GetCultureInfo(settings.Culture);
 
