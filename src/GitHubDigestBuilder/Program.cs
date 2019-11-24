@@ -177,7 +177,7 @@ namespace GitHubDigestBuilder
 
 				async Task<(IReadOnlyList<JsonElement> Events, bool IsPartial)> loadEventsAsync(string sourceKind, string sourceName)
 				{
-					var eventElements = new List<JsonElement>();
+					var elements = new List<JsonElement>();
 					var foundLastPage = true;
 
 					await loadPagesAsync($"{sourceKind}/{sourceName}/events", pageElement =>
@@ -196,7 +196,7 @@ namespace GitHubDigestBuilder
 									var eventId = eventElement.GetProperty("id").GetString();
 									var actorName = eventElement.GetProperty("actor", "login").GetString();
 									if (handledEventIds.Add(eventId) && !usersToExclude.Contains(actorName))
-										eventElements.Add(eventElement);
+										elements.Add(eventElement);
 								}
 							}
 						}
@@ -208,264 +208,269 @@ namespace GitHubDigestBuilder
 						return foundLastPage;
 					});
 
-					eventElements.Reverse();
-					return (eventElements, !foundLastPage);
+					elements.Reverse();
+					return (elements, !foundLastPage);
 				}
+
+				var eventElements = new List<JsonElement>();
+
+				foreach (var sourceRepoName in sourceRepoNames)
+				{
+					// TODO: record warning when partial
+					var (repoEventElements, isPartial) = await loadEventsAsync("networks", sourceRepoName);
+					eventElements.AddRange(repoEventElements);
+				}
+
+				eventElements = eventElements.OrderBy(x => ParseDateTime(x.GetProperty("created_at").GetString())).ToList();
 
 				var branches = new List<BranchData>();
 				var tagEvents = new List<TagEventData>();
 				var wikiEvents = new List<WikiEventData>();
 				var commentedCommits = new List<CommentedCommitData>();
 
-				foreach (var sourceRepoName in sourceRepoNames)
+				foreach (var eventElement in eventElements)
 				{
-					// TODO: record warning when partial
-					var (eventElements, isPartial) = await loadEventsAsync("networks", sourceRepoName);
+					var repoName = eventElement.GetProperty("repo", "name").GetString();
 
-					foreach (var eventElement in eventElements)
+					BranchData addBranch(string n, string r)
 					{
-						var repoName = eventElement.GetProperty("repo", "name").GetString();
-
-						BranchData addBranch(string n, string r)
+						var branch = new BranchData
 						{
-							var branch = new BranchData
-							{
-								Name = n,
-								RepoName = r,
-							};
-							branches.Add(branch);
-							return branch;
-						}
+							Name = n,
+							RepoName = r,
+						};
+						branches.Add(branch);
+						return branch;
+					}
 
-						BranchData getOrAddBranch(string n, string r) =>
-							branches.LastOrDefault(x => x.Name == n && x.RepoName == r) ?? addBranch(n, r);
+					BranchData getOrAddBranch(string n, string r) =>
+						branches.LastOrDefault(x => x.Name == n && x.RepoName == r) ?? addBranch(n, r);
 
-						var actorName = eventElement.GetProperty("actor", "login").GetString();
-						var payload = eventElement.GetProperty("payload");
+					var actorName = eventElement.GetProperty("actor", "login").GetString();
+					var payload = eventElement.GetProperty("payload");
 
-						var eventType = eventElement.GetProperty("type").GetString();
-						if (eventType == "PushEvent")
+					var eventType = eventElement.GetProperty("type").GetString();
+					if (eventType == "PushEvent")
+					{
+						const string branchRefPrefix = "refs/heads/";
+						var refName = payload.TryGetProperty("ref")?.GetString();
+						if (refName?.StartsWith(branchRefPrefix) == true)
 						{
-							const string branchRefPrefix = "refs/heads/";
-							var refName = payload.TryGetProperty("ref")?.GetString();
-							if (refName?.StartsWith(branchRefPrefix) == true)
+							var branchName = refName.Substring(branchRefPrefix.Length);
+							var branch = getOrAddBranch(branchName, repoName);
+
+							var beforeSha = payload.TryGetProperty("before")?.GetString();
+							var afterSha = payload.TryGetProperty("head")?.GetString();
+							var commitCount = payload.TryGetProperty("size")?.GetInt32() ?? 0;
+							var distinctCommitCount = payload.TryGetProperty("distinct_size")?.GetInt32() ?? 0;
+							var commits = payload.TryGetProperty("commits")?.EnumerateArray().ToList() ?? new List<JsonElement>();
+							var canMerge = commitCount == commits.Count;
+
+							var push = branch.Events.LastOrDefault() as PushEventData;
+							if (push == null ||
+								push.ActorName != actorName ||
+								push.BranchName != branchName ||
+								push.AfterSha != beforeSha ||
+								!push.CanMerge ||
+								!canMerge)
 							{
-								var branchName = refName.Substring(branchRefPrefix.Length);
-								var branch = getOrAddBranch(branchName, repoName);
-
-								var beforeSha = payload.TryGetProperty("before")?.GetString();
-								var afterSha = payload.TryGetProperty("head")?.GetString();
-								var commitCount = payload.TryGetProperty("size")?.GetInt32() ?? 0;
-								var distinctCommitCount = payload.TryGetProperty("distinct_size")?.GetInt32() ?? 0;
-								var commits = payload.TryGetProperty("commits")?.EnumerateArray().ToList() ?? new List<JsonElement>();
-								var canMerge = commitCount == commits.Count;
-
-								var push = branch.Events.LastOrDefault() as PushEventData;
-								if (push == null ||
-									push.ActorName != actorName ||
-									push.BranchName != branchName ||
-									push.AfterSha != beforeSha ||
-									!push.CanMerge ||
-									!canMerge)
+								push = new PushEventData
 								{
-									push = new PushEventData
-									{
-										Kind = "push",
-										RepoName = repoName,
-										ActorName = actorName,
-										BranchName = branchName,
-										BeforeSha = beforeSha,
-										CanMerge = canMerge,
-									};
-									branch.Events.Add(push);
-								}
-
-								push.AfterSha = afterSha;
-								push.CommitCount += commitCount;
-								push.NewCommitCount += distinctCommitCount;
-
-								foreach (var commit in commits.Where(x => x.TryGetProperty("distinct")?.GetBoolean() == true))
-								{
-									var message = commit.TryGetProperty("message")?.GetString() ?? "";
-									var messageMatch = Regex.Match(message, @"^([^\r\n]*)(.*)$", RegexOptions.Singleline);
-									var subject = messageMatch.Groups[1].Value.Trim();
-									var remarks = Regex.Replace(messageMatch.Groups[2].Value.Trim(), @"\s+", " ");
-
-									push.NewCommits.Add(new CommitData
-									{
-										RepoName = repoName,
-										Sha = commit.GetProperty("sha").GetString(),
-										Subject = subject,
-										Remarks = remarks,
-									});
-								}
-							}
-						}
-						else if (eventType == "CreateEvent" || eventType == "DeleteEvent")
-						{
-							var isDelete = eventType == "DeleteEvent";
-
-							var refType = payload.GetProperty("ref_type").GetString();
-							if (refType == "branch")
-							{
-								var branchName = payload.GetProperty("ref").GetString();
-								var branch = getOrAddBranch(branchName, repoName);
-
-								branch.Events.Add(new BranchEventData
-								{
-									Kind = isDelete ? "delete-branch" : "create-branch",
+									Kind = "push",
 									RepoName = repoName,
 									ActorName = actorName,
-								});
+									BranchName = branchName,
+									BeforeSha = beforeSha,
+									CanMerge = canMerge,
+								};
+								branch.Events.Add(push);
 							}
-							else if (refType == "tag")
+
+							push.AfterSha = afterSha;
+							push.CommitCount += commitCount;
+							push.NewCommitCount += distinctCommitCount;
+
+							foreach (var commit in commits.Where(x => x.TryGetProperty("distinct")?.GetBoolean() == true))
 							{
-								tagEvents.Add(new TagEventData
+								var message = commit.TryGetProperty("message")?.GetString() ?? "";
+								var messageMatch = Regex.Match(message, @"^([^\r\n]*)(.*)$", RegexOptions.Singleline);
+								var subject = messageMatch.Groups[1].Value.Trim();
+								var remarks = Regex.Replace(messageMatch.Groups[2].Value.Trim(), @"\s+", " ");
+
+								push.NewCommits.Add(new CommitData
 								{
-									Kind = isDelete ? "delete-tag" : "create-tag",
 									RepoName = repoName,
-									ActorName = actorName,
-									TagName = payload.GetProperty("ref").GetString(),
+									Sha = commit.GetProperty("sha").GetString(),
+									Subject = subject,
+									Remarks = remarks,
 								});
 							}
 						}
-						else if (eventType == "GollumEvent")
+					}
+					else if (eventType == "CreateEvent" || eventType == "DeleteEvent")
+					{
+						var isDelete = eventType == "DeleteEvent";
+
+						var refType = payload.GetProperty("ref_type").GetString();
+						if (refType == "branch")
 						{
-							foreach (var page in payload.GetProperty("pages").EnumerateArray())
+							var branchName = payload.GetProperty("ref").GetString();
+							var branch = getOrAddBranch(branchName, repoName);
+
+							branch.Events.Add(new BranchEventData
 							{
-								var action = page.GetProperty("action").GetString();
-								var pageName = page.GetProperty("page_name").GetString();
-								var wikiEvent = wikiEvents.LastOrDefault();
-								if (wikiEvent == null || wikiEvent.ActorName != actorName || wikiEvent.PageName != pageName)
-								{
-									wikiEvent = new WikiEventData
-									{
-										Kind = $"{action}-wiki-page",
-										RepoName = repoName,
-										ActorName = actorName,
-										PageName = pageName,
-									};
-									wikiEvents.Add(wikiEvent);
-								}
-
-								// leave created kind, but use last title
-								wikiEvent.PageTitle = page.GetProperty("title").GetString();
-							}
-						}
-						else if (eventType == "CommitCommentEvent")
-						{
-							var data = payload.GetProperty("comment");
-							var commentId = data.GetProperty("id").GetInt32();
-							var sha = data.GetProperty("commit_id").GetString();
-							var filePath = data.TryGetProperty("path")?.GetString();
-							var position = data.TryGetProperty("position")?.GetNullOrInt32();
-
-							var commit = commentedCommits.SingleOrDefault(x => x.Sha == sha);
-							if (commit == null)
-								commentedCommits.Add(commit = new CommentedCommitData { RepoName = repoName, Sha = sha });
-
-							var conversation = commit.Conversations.SingleOrDefault(x => x.FilePath == filePath && x.Position == position?.ToString());
-							if (conversation == null)
-								commit.Conversations.Add(conversation = new ConversationData { FilePath = filePath, Position = position.ToString() });
-
-							conversation.Comments.Add(new CommentData
-							{
+								Kind = isDelete ? "delete-branch" : "create-branch",
+								RepoName = repoName,
 								ActorName = actorName,
-								Url = $"{baseUrl}/{repoName}/commit/{sha}#{(filePath == null ? "commitcomment-" : "r")}{commentId}",
-								Body = data.GetProperty("body").GetString(),
 							});
 						}
-						else if (eventType == "PullRequestEvent" || eventType == "PullRequestReviewCommentEvent")
+						else if (refType == "tag")
 						{
-							var pullRequest = payload.GetProperty("pull_request");
-							var number = pullRequest.GetProperty("number").GetInt32();
-							var branchName = pullRequest.GetProperty("head", "ref").GetString();
-							var headRepoName = pullRequest.GetProperty("head", "repo", "full_name").GetString();
-							var branch = getOrAddBranch(branchName, headRepoName);
-
-							if (branch.PullRequest != null && branch.PullRequest.Number != number)
-								branch = addBranch(branchName, headRepoName);
-
-							branch.RepoName = repoName;
-							branch.PullRequest = new PullRequestData
+							tagEvents.Add(new TagEventData
 							{
-								Number = number,
+								Kind = isDelete ? "delete-tag" : "create-tag",
 								RepoName = repoName,
-							};
-
-							var title = pullRequest.TryGetProperty("title")?.GetString();
-							if (title != null)
-								branch.PullRequest.Title = title;
-
-							var eventKindPrefix = eventType switch
+								ActorName = actorName,
+								TagName = payload.GetProperty("ref").GetString(),
+							});
+						}
+					}
+					else if (eventType == "GollumEvent")
+					{
+						foreach (var page in payload.GetProperty("pages").EnumerateArray())
+						{
+							var action = page.GetProperty("action").GetString();
+							var pageName = page.GetProperty("page_name").GetString();
+							var wikiEvent = wikiEvents.LastOrDefault();
+							if (wikiEvent == null || wikiEvent.ActorName != actorName || wikiEvent.PageName != pageName)
 							{
-								"PullRequestEvent" => "pull-request-",
-								"PullRequestReviewCommentEvent" => "pull-request-review-comment-",
-								_ => throw new InvalidOperationException(),
-							};
-							var eventKind = eventKindPrefix + payload.GetProperty("action").GetString();
+								wikiEvent = new WikiEventData
+								{
+									Kind = $"{action}-wiki-page",
+									RepoName = repoName,
+									ActorName = actorName,
+									PageName = pageName,
+								};
+								wikiEvents.Add(wikiEvent);
+							}
 
-							if (eventKind == "pull-request-opened" || eventKind == "pull-request-closed" ||
-								eventKind == "pull-request-review-comment-created" || eventKind == "pull-request-review-comment-edited")
+							// leave created kind, but use last title
+							wikiEvent.PageTitle = page.GetProperty("title").GetString();
+						}
+					}
+					else if (eventType == "CommitCommentEvent")
+					{
+						var data = payload.GetProperty("comment");
+						var commentId = data.GetProperty("id").GetInt32();
+						var sha = data.GetProperty("commit_id").GetString();
+						var filePath = data.TryGetProperty("path")?.GetString();
+						var position = data.TryGetProperty("position")?.GetNullOrInt32();
+
+						var commit = commentedCommits.SingleOrDefault(x => x.Sha == sha);
+						if (commit == null)
+							commentedCommits.Add(commit = new CommentedCommitData { RepoName = repoName, Sha = sha });
+
+						var conversation = commit.Conversations.SingleOrDefault(x => x.FilePath == filePath && x.Position == position?.ToString());
+						if (conversation == null)
+							commit.Conversations.Add(conversation = new ConversationData { FilePath = filePath, Position = position.ToString() });
+
+						conversation.Comments.Add(new CommentData
+						{
+							ActorName = actorName,
+							Url = $"{baseUrl}/{repoName}/commit/{sha}#{(filePath == null ? "commitcomment-" : "r")}{commentId}",
+							Body = data.GetProperty("body").GetString(),
+						});
+					}
+					else if (eventType == "PullRequestEvent" || eventType == "PullRequestReviewCommentEvent")
+					{
+						var pullRequest = payload.GetProperty("pull_request");
+						var number = pullRequest.GetProperty("number").GetInt32();
+						var branchName = pullRequest.GetProperty("head", "ref").GetString();
+						var headRepoName = pullRequest.GetProperty("head", "repo", "full_name").GetString();
+						var branch = getOrAddBranch(branchName, headRepoName);
+
+						if (branch.PullRequest != null && branch.PullRequest.Number != number)
+							branch = addBranch(branchName, headRepoName);
+
+						branch.RepoName = repoName;
+						branch.PullRequest = new PullRequestData
+						{
+							Number = number,
+							RepoName = repoName,
+						};
+
+						var title = pullRequest.TryGetProperty("title")?.GetString();
+						if (title != null)
+							branch.PullRequest.Title = title;
+
+						var eventKindPrefix = eventType switch
+						{
+							"PullRequestEvent" => "pull-request-",
+							"PullRequestReviewCommentEvent" => "pull-request-review-comment-",
+							_ => throw new InvalidOperationException(),
+						};
+						var eventKind = eventKindPrefix + payload.GetProperty("action").GetString();
+
+						if (eventKind == "pull-request-opened" || eventKind == "pull-request-closed" ||
+							eventKind == "pull-request-review-comment-created" || eventKind == "pull-request-review-comment-edited")
+						{
+							BranchData baseBranch = null;
+
+							if (eventKind == "pull-request-closed" && pullRequest.GetProperty("merged").GetBoolean())
 							{
-								BranchData baseBranch = null;
+								eventKind = "pull-request-merged";
 
-								if (eventKind == "pull-request-closed" && pullRequest.GetProperty("merged").GetBoolean())
+								var baseBranchName = pullRequest.GetProperty("base", "ref").GetString();
+
+								var baseRepoName = pullRequest.GetProperty("base", "repo", "full_name").GetString();
+								if (repoName != baseRepoName)
+									throw new InvalidOperationException("Unexpected pull request base.");
+
+								baseBranch = new BranchData { Name = baseBranchName, RepoName = repoName };
+							}
+
+							if (eventType == "PullRequestReviewCommentEvent")
+							{
+								var commentElement = payload.GetProperty("comment");
+								var commentId = commentElement.GetProperty("id").GetInt32();
+
+								var filePath = commentElement.GetProperty("path").GetString();
+								var positionBefore = commentElement.GetProperty("original_position").GetNullOrInt32();
+								var positionAfter = commentElement.GetProperty("position").GetNullOrInt32();
+								var position = $"{positionBefore}:{positionAfter}";
+
+								var conversation = branch.Events.OfType<BranchEventData>().Select(x => x.Conversation).Where(x => x != null)
+									.SingleOrDefault(x => x.FilePath == filePath && x.Position == position);
+								if (conversation == null)
 								{
-									eventKind = "pull-request-merged";
+									conversation = new ConversationData { FilePath = filePath, Position = position };
 
-									var baseBranchName = pullRequest.GetProperty("base", "ref").GetString();
-
-									var baseRepoName = pullRequest.GetProperty("base", "repo", "full_name").GetString();
-									if (repoName != baseRepoName)
-										throw new InvalidOperationException("Unexpected pull request base.");
-
-									baseBranch = new BranchData { Name = baseBranchName, RepoName = repoName };
-								}
-
-								if (eventType == "PullRequestReviewCommentEvent")
-								{
-									var commentElement = payload.GetProperty("comment");
-									var commentId = commentElement.GetProperty("id").GetInt32();
-
-									var filePath = commentElement.GetProperty("path").GetString();
-									var positionBefore = commentElement.GetProperty("original_position").GetNullOrInt32();
-									var positionAfter = commentElement.GetProperty("position").GetNullOrInt32();
-									var position = $"{positionBefore}:{positionAfter}";
-
-									var conversation = branch.Events.OfType<BranchEventData>().Select(x => x.Conversation).Where(x => x != null)
-										.SingleOrDefault(x => x.FilePath == filePath && x.Position == position);
-									if (conversation == null)
-									{
-										conversation = new ConversationData { FilePath = filePath, Position = position };
-
-										var branchEvent = new BranchEventData
-										{
-											Kind = eventKind,
-											RepoName = branch.RepoName,
-											ActorName = actorName,
-											BaseBranch = baseBranch,
-											Conversation = conversation,
-										};
-										branch.Events.Add(branchEvent);
-									}
-									conversation.Comments.Add(new CommentData
-									{
-										ActorName = actorName,
-										Url = $"{baseUrl}/{repoName}/pull/{number}#discussion_r{commentId}",
-										Body = commentElement.GetProperty("body").GetString(),
-									});
-								}
-								else
-								{
-									branch.Events.Add(new BranchEventData
+									var branchEvent = new BranchEventData
 									{
 										Kind = eventKind,
 										RepoName = branch.RepoName,
 										ActorName = actorName,
 										BaseBranch = baseBranch,
-									});
+										Conversation = conversation,
+									};
+									branch.Events.Add(branchEvent);
 								}
+								conversation.Comments.Add(new CommentData
+								{
+									ActorName = actorName,
+									Url = $"{baseUrl}/{repoName}/pull/{number}#discussion_r{commentId}",
+									Body = commentElement.GetProperty("body").GetString(),
+								});
+							}
+							else
+							{
+								branch.Events.Add(new BranchEventData
+								{
+									Kind = eventKind,
+									RepoName = branch.RepoName,
+									ActorName = actorName,
+									BaseBranch = baseBranch,
+								});
 							}
 						}
 					}
