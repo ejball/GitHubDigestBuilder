@@ -21,32 +21,38 @@ namespace GitHubDigestBuilder
 	{
 		public static async Task RunAsync(ArgsReader args)
 		{
+			// read command-line arguments
 			var dateString = args.ReadOption("date");
 			var autoRefresh = args.ReadFlag("auto-refresh");
 			var authToken = args.ReadOption("auth");
 			var configFilePath = args.ReadArgument();
 			args.VerifyComplete();
 
+			// find config file
 			configFilePath = Path.GetFullPath(configFilePath);
 			if (!File.Exists(configFilePath))
 				throw new ApplicationException("Configuration file not found.");
 			var configFileDirectory = Path.GetDirectoryName(configFilePath);
 
+			// deserialize config file
 			var settings = JsonSerializer.Deserialize<DigestSettings>(
 				ConvertYamlToJson(File.ReadAllText(configFilePath)),
 				new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
 
+			// determine date/time range in UTC
 			var timeZoneOffset = settings.TimeZoneOffsetHours != null ? TimeSpan.FromHours(settings.TimeZoneOffsetHours.Value) : DateTimeOffset.Now.Offset;
 			var date = dateString != null ? ParseDate(dateString) : new DateTimeOffset(DateTime.UtcNow).ToOffset(timeZoneOffset).Date.AddDays(-1.0);
 			var dateIso = date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
 			var startDateTimeUtc = new DateTimeOffset(date.Year, date.Month, date.Day, 0, 0, 0, timeZoneOffset).UtcDateTime;
 			var endDateTimeUtc = startDateTimeUtc.AddDays(1.0);
 
+			// determine output file
 			var outputFile = Path.Combine(configFileDirectory, settings.OutputDirectory ?? ".", $"{dateIso}.html");
 			Directory.CreateDirectory(Path.GetDirectoryName(outputFile));
 
 			try
 			{
+				// prepare dump directory, if any
 				string dumpDirectory = null;
 				if (settings.DumpDirectory != null)
 				{
@@ -54,6 +60,7 @@ namespace GitHubDigestBuilder
 					Directory.CreateDirectory(dumpDirectory);
 				}
 
+				// prepare HTTP client
 				var httpClient = new HttpClient();
 				httpClient.DefaultRequestHeaders.UserAgent.Add(ProductInfoHeaderValue.Parse("GitHubDigestBuilder"));
 				httpClient.DefaultRequestHeaders.Accept.Add(MediaTypeWithQualityHeaderValue.Parse("application/vnd.github.v3+json"));
@@ -63,6 +70,8 @@ namespace GitHubDigestBuilder
 					httpClient.DefaultRequestHeaders.Authorization = AuthenticationHeaderValue.Parse($"token {authToken}");
 
 				var apiBase = (settings.GitHub?.ApiUrl ?? "https://api.github.com").TrimEnd('/');
+
+				// don't process the same event twice
 				var handledEventIds = new HashSet<string>();
 
 				async Task loadPagesAsync(string url, Func<JsonElement, bool> processPage)
@@ -106,6 +115,7 @@ namespace GitHubDigestBuilder
 
 				var baseUrl = (settings.GitHub?.WebUrl ?? "https://github.com").TrimEnd('/');
 
+				// find all source repositories
 				var sourceRepos = settings.Repos ?? new List<RepoSettings>();
 				var sourceRepoNames = new List<string>();
 
