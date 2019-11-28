@@ -71,11 +71,12 @@ namespace GitHubDigestBuilder
 					httpClient.DefaultRequestHeaders.Authorization = AuthenticationHeaderValue.Parse($"token {authToken}");
 
 				var apiBase = (settings.GitHub?.ApiUrl ?? "https://api.github.com").TrimEnd('/');
+				var warnings = new List<string>();
 
 				// don't process the same event twice
 				var handledEventIds = new HashSet<string>();
 
-				async Task<bool> loadPagesAsync(string url, Func<JsonElement, bool> processPage)
+				async Task<DownloadStatus> loadPagesAsync(string url, Func<JsonElement, bool> processPage)
 				{
 					var dumpName = Regex.Replace(Regex.Replace(url, @"\?.*$", ""), @"/+", "_").Trim('_');
 
@@ -96,7 +97,9 @@ namespace GitHubDigestBuilder
 							var request = new HttpRequestMessage(HttpMethod.Get, $"{apiBase}/{url}{(urlHasParams ? '&' : '?')}page={pageNumber}");
 							var response = await httpClient.SendAsync(request);
 
-							if (response.StatusCode != System.Net.HttpStatusCode.OK)
+							if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+								return DownloadStatus.NotFound;
+							else if (response.StatusCode != System.Net.HttpStatusCode.OK)
 								throw new InvalidOperationException($"Unexpected status code: {response.StatusCode}");
 
 							await using var pageStream = await response.Content.ReadAsStreamAsync();
@@ -113,11 +116,10 @@ namespace GitHubDigestBuilder
 						foundLastPage = pageDocument.RootElement.GetArrayLength() == 0 || processPage(pageDocument.RootElement);
 					}
 
-					return foundLastPage;
+					return foundLastPage ? DownloadStatus.Success : DownloadStatus.TooMuchActivity;
 				}
 
 				var baseUrl = (settings.GitHub?.WebUrl ?? "https://github.com").TrimEnd('/');
-				var warnings = new List<string>();
 
 				// find all source repositories
 				var sourceRepos = settings.Repos ?? new List<RepoSettings>();
@@ -126,7 +128,7 @@ namespace GitHubDigestBuilder
 				async Task addReposForSource(string sourceKind, string sourceName)
 				{
 					var orgRepoNames = new List<string>();
-					var foundLastRepo = await loadPagesAsync($"{sourceKind}/{sourceName}/repos?sort=updated", pageElement =>
+					var status = await loadPagesAsync($"{sourceKind}/{sourceName}/repos?sort=updated", pageElement =>
 					{
 						var foundLastPage = false;
 
@@ -142,8 +144,10 @@ namespace GitHubDigestBuilder
 						return foundLastPage;
 					});
 					sourceRepoNames.AddRange(orgRepoNames);
-					if (!foundLastRepo)
+					if (status == DownloadStatus.TooMuchActivity)
 						warnings.Add($"Too many updated repositories found for {sourceName}.");
+					else if (status == DownloadStatus.NotFound)
+						warnings.Add($"Failed to find repositories for {sourceName}.");
 				}
 
 				foreach (var sourceRepo in sourceRepos)
@@ -181,10 +185,10 @@ namespace GitHubDigestBuilder
 					}
 				}
 
-				async Task<(IReadOnlyList<RawEventData> Events, bool IsComplete)> loadEventsAsync(string sourceKind, string sourceName)
+				async Task<(IReadOnlyList<RawEventData> Events, DownloadStatus Status)> loadEventsAsync(string sourceKind, string sourceName)
 				{
 					var events = new List<RawEventData>();
-					var foundLastEvent = await loadPagesAsync($"{sourceKind}/{sourceName}/events", pageElement =>
+					var status = await loadPagesAsync($"{sourceKind}/{sourceName}/events", pageElement =>
 					{
 						var foundLastPage = false;
 
@@ -217,21 +221,26 @@ namespace GitHubDigestBuilder
 					});
 
 					events.Reverse();
-					return (events, foundLastEvent);
+					return (events, status);
 				}
 
 				var rawEvents = new List<RawEventData>();
 
 				foreach (var sourceRepoName in sourceRepoNames)
 				{
-					var (repoEventElements, isComplete) = await loadEventsAsync("networks", sourceRepoName);
-					rawEvents.AddRange(repoEventElements);
+					var (networkEventElements, networkStatus) = await loadEventsAsync("networks", sourceRepoName);
+					rawEvents.AddRange(networkEventElements);
 
-					if (!isComplete)
+					if (networkStatus != DownloadStatus.Success)
 					{
-						(repoEventElements, isComplete) = await loadEventsAsync("repos", sourceRepoName);
+						var (repoEventElements, repoStatus) = await loadEventsAsync("repos", sourceRepoName);
 						rawEvents.AddRange(repoEventElements);
-						warnings.Add($"{sourceRepoName} {(isComplete ? "repository network" : "repository")} had too much activity.");
+						if (repoStatus == DownloadStatus.TooMuchActivity)
+							warnings.Add($"{sourceRepoName} repository had too much activity.");
+						else if (networkStatus == DownloadStatus.TooMuchActivity)
+							warnings.Add($"{sourceRepoName} repository network had too much activity.");
+						else if (repoStatus == DownloadStatus.NotFound)
+							warnings.Add($"{sourceRepoName} repository not found.");
 					}
 				}
 
@@ -612,6 +621,13 @@ namespace GitHubDigestBuilder
 			var deserializer = new DeserializerBuilder().Build();
 			var serializer = new SerializerBuilder().JsonCompatible().Build();
 			return serializer.Serialize(deserializer.Deserialize(new StringReader(yaml)));
+		}
+
+		private enum DownloadStatus
+		{
+			Success,
+			NotFound,
+			TooMuchActivity,
 		}
 	}
 }
