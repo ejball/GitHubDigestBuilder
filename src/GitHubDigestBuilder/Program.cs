@@ -235,24 +235,23 @@ namespace GitHubDigestBuilder
 				var wikiEvents = new List<WikiEventData>();
 				var commentedCommits = new List<CommentedCommitData>();
 
+				BranchData addBranch(string branchName, string repoName)
+				{
+					var branch = new BranchData
+					{
+						Name = branchName,
+						RepoName = repoName,
+					};
+					branches.Add(branch);
+					return branch;
+				}
+
+				BranchData getOrAddBranch(string branchName, string repoName) =>
+					branches.LastOrDefault(x => x.Name == branchName && x.RepoName == repoName) ?? addBranch(branchName, repoName);
+
 				foreach (var eventElement in eventElements)
 				{
 					var repoName = eventElement.GetProperty("repo", "name").GetString();
-
-					BranchData addBranch(string n, string r)
-					{
-						var branch = new BranchData
-						{
-							Name = n,
-							RepoName = r,
-						};
-						branches.Add(branch);
-						return branch;
-					}
-
-					BranchData getOrAddBranch(string n, string r) =>
-						branches.LastOrDefault(x => x.Name == n && x.RepoName == r) ?? addBranch(n, r);
-
 					var actorName = eventElement.GetProperty("actor", "login").GetString();
 					var payload = eventElement.GetProperty("payload");
 
