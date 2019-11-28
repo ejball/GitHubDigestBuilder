@@ -74,7 +74,7 @@ namespace GitHubDigestBuilder
 				// don't process the same event twice
 				var handledEventIds = new HashSet<string>();
 
-				async Task loadPagesAsync(string url, Func<JsonElement, bool> processPage)
+				async Task<bool> loadPagesAsync(string url, Func<JsonElement, bool> processPage)
 				{
 					var dumpName = Regex.Replace(Regex.Replace(url, @"\?.*$", ""), @"/+", "_").Trim('_');
 
@@ -109,11 +109,14 @@ namespace GitHubDigestBuilder
 							}
 						}
 
-						foundLastPage = processPage(pageDocument.RootElement);
+						foundLastPage = pageDocument.RootElement.GetArrayLength() == 0 || processPage(pageDocument.RootElement);
 					}
+
+					return foundLastPage;
 				}
 
 				var baseUrl = (settings.GitHub?.WebUrl ?? "https://github.com").TrimEnd('/');
+				var warnings = new List<string>();
 
 				// find all source repositories
 				var sourceRepos = settings.Repos ?? new List<RepoSettings>();
@@ -122,7 +125,7 @@ namespace GitHubDigestBuilder
 				async Task addReposForSource(string sourceKind, string sourceName)
 				{
 					var orgRepoNames = new List<string>();
-					await loadPagesAsync($"{sourceKind}/{sourceName}/repos?sort=updated", pageElement =>
+					var foundLastRepo = await loadPagesAsync($"{sourceKind}/{sourceName}/repos?sort=updated", pageElement =>
 					{
 						var foundLastPage = false;
 
@@ -138,21 +141,23 @@ namespace GitHubDigestBuilder
 						return foundLastPage;
 					});
 					sourceRepoNames.AddRange(orgRepoNames);
+					if (!foundLastRepo)
+						warnings.Add($"Too many updated repositories found for {sourceName}.");
 				}
 
 				foreach (var sourceRepo in sourceRepos)
 				{
 					switch (sourceRepo)
 					{
-					case { Name: var name, User: null, Org: null }:
+					case { Name: string name, User: null, Org: null }:
 						sourceRepoNames.Add(name);
 						break;
 
-					case { Name: null, User: var user, Org: null }:
+					case { Name: null, User: string user, Org: null }:
 						await addReposForSource("users", user);
 						break;
 
-					case { Name: null, User: null, Org: var org }:
+					case { Name: null, User: null, Org: string org }:
 						await addReposForSource("orgs", org);
 						break;
 
@@ -166,7 +171,7 @@ namespace GitHubDigestBuilder
 				{
 					switch (exclude)
 					{
-					case { User: var user }:
+					case { User: string user }:
 						usersToExclude.Add(user);
 						break;
 
@@ -175,56 +180,48 @@ namespace GitHubDigestBuilder
 					}
 				}
 
-				async Task<(IReadOnlyList<JsonElement> Events, bool IsPartial)> loadEventsAsync(string sourceKind, string sourceName)
+				async Task<(IReadOnlyList<JsonElement> Events, bool IsComplete)> loadEventsAsync(string sourceKind, string sourceName)
 				{
 					var elements = new List<JsonElement>();
-					var foundLastPage = true;
-
-					await loadPagesAsync($"{sourceKind}/{sourceName}/events", pageElement =>
+					var foundLastEvent = await loadPagesAsync($"{sourceKind}/{sourceName}/events", pageElement =>
 					{
-						if (pageElement.GetArrayLength() != 0)
+						var foundLastPage = false;
+
+						foreach (var eventElement in pageElement.EnumerateArray())
 						{
-							foreach (var eventElement in pageElement.EnumerateArray())
+							var createdUtc = ParseDateTime(eventElement.GetProperty("created_at").GetString());
+							if (createdUtc < startDateTimeUtc)
 							{
-								var createdUtc = ParseDateTime(eventElement.GetProperty("created_at").GetString());
-								if (createdUtc < startDateTimeUtc)
-								{
-									foundLastPage = true;
-								}
-								else if (createdUtc < endDateTimeUtc)
-								{
-									var eventId = eventElement.GetProperty("id").GetString();
-									var actorName = eventElement.GetProperty("actor", "login").GetString();
-									if (handledEventIds.Add(eventId) && !usersToExclude.Contains(actorName))
-										elements.Add(eventElement);
-								}
+								foundLastPage = true;
 							}
-						}
-						else
-						{
-							foundLastPage = true;
+							else if (createdUtc < endDateTimeUtc)
+							{
+								var eventId = eventElement.GetProperty("id").GetString();
+								var actorName = eventElement.GetProperty("actor", "login").GetString();
+								if (handledEventIds.Add(eventId) && !usersToExclude.Contains(actorName))
+									elements.Add(eventElement);
+							}
 						}
 
 						return foundLastPage;
 					});
 
 					elements.Reverse();
-					return (elements, !foundLastPage);
+					return (elements, foundLastEvent);
 				}
 
 				var eventElements = new List<JsonElement>();
-				var warnings = new List<string>();
 
 				foreach (var sourceRepoName in sourceRepoNames)
 				{
-					var (repoEventElements, isPartial) = await loadEventsAsync("networks", sourceRepoName);
+					var (repoEventElements, isComplete) = await loadEventsAsync("networks", sourceRepoName);
 					eventElements.AddRange(repoEventElements);
 
-					if (isPartial)
+					if (!isComplete)
 					{
-						(repoEventElements, isPartial) = await loadEventsAsync("repos", sourceRepoName);
+						(repoEventElements, isComplete) = await loadEventsAsync("repos", sourceRepoName);
 						eventElements.AddRange(repoEventElements);
-						warnings.Add($"{sourceRepoName} {(isPartial ? "repository" : "repository network")} had too much activity.");
+						warnings.Add($"{sourceRepoName} {(isComplete ? "repository network" : "repository")} had too much activity.");
 					}
 				}
 
