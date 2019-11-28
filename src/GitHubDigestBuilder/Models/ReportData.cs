@@ -9,6 +9,8 @@ namespace GitHubDigestBuilder.Models
 
 		public DateTime? PreviousDate { get; set; }
 
+		public DateTimeOffset Now { get; set; }
+
 		public string BaseUrl { get; set; }
 
 		public bool AutoRefresh { get; set; }

@@ -41,7 +41,8 @@ namespace GitHubDigestBuilder
 
 			// determine date/time range in UTC
 			var timeZoneOffset = settings.TimeZoneOffsetHours != null ? TimeSpan.FromHours(settings.TimeZoneOffsetHours.Value) : DateTimeOffset.Now.Offset;
-			var date = dateString != null ? ParseDate(dateString) : new DateTimeOffset(DateTime.UtcNow).ToOffset(timeZoneOffset).Date.AddDays(-1.0);
+			var now = new DateTimeOffset(DateTime.UtcNow).ToOffset(timeZoneOffset);
+			var date = dateString != null ? ParseDate(dateString) : now.Date.AddDays(-1.0);
 			var dateIso = date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
 			var startDateTimeUtc = new DateTimeOffset(date.Year, date.Month, date.Day, 0, 0, 0, timeZoneOffset).UtcDateTime;
 			var endDateTimeUtc = startDateTimeUtc.AddDays(1.0);
@@ -180,9 +181,9 @@ namespace GitHubDigestBuilder
 					}
 				}
 
-				async Task<(IReadOnlyList<JsonElement> Events, bool IsComplete)> loadEventsAsync(string sourceKind, string sourceName)
+				async Task<(IReadOnlyList<RawEventData> Events, bool IsComplete)> loadEventsAsync(string sourceKind, string sourceName)
 				{
-					var elements = new List<JsonElement>();
+					var events = new List<RawEventData>();
 					var foundLastEvent = await loadPagesAsync($"{sourceKind}/{sourceName}/events", pageElement =>
 					{
 						var foundLastPage = false;
@@ -199,60 +200,72 @@ namespace GitHubDigestBuilder
 								var eventId = eventElement.GetProperty("id").GetString();
 								var actorName = eventElement.GetProperty("actor", "login").GetString();
 								if (handledEventIds.Add(eventId) && !usersToExclude.Contains(actorName))
-									elements.Add(eventElement);
+								{
+									events.Add(new RawEventData
+									{
+										EventId = eventId,
+										SourceRepoName = sourceName,
+										ActorName = actorName,
+										CreatedUtc = createdUtc,
+										Element = eventElement,
+									});
+								}
 							}
 						}
 
 						return foundLastPage;
 					});
 
-					elements.Reverse();
-					return (elements, foundLastEvent);
+					events.Reverse();
+					return (events, foundLastEvent);
 				}
 
-				var eventElements = new List<JsonElement>();
+				var rawEvents = new List<RawEventData>();
 
 				foreach (var sourceRepoName in sourceRepoNames)
 				{
 					var (repoEventElements, isComplete) = await loadEventsAsync("networks", sourceRepoName);
-					eventElements.AddRange(repoEventElements);
+					rawEvents.AddRange(repoEventElements);
 
 					if (!isComplete)
 					{
 						(repoEventElements, isComplete) = await loadEventsAsync("repos", sourceRepoName);
-						eventElements.AddRange(repoEventElements);
+						rawEvents.AddRange(repoEventElements);
 						warnings.Add($"{sourceRepoName} {(isComplete ? "repository network" : "repository")} had too much activity.");
 					}
 				}
 
-				eventElements = eventElements.OrderBy(x => ParseDateTime(x.GetProperty("created_at").GetString())).ToList();
+				rawEvents = rawEvents.OrderBy(x => x.CreatedUtc).ToList();
 
 				var branches = new List<BranchData>();
 				var tagEvents = new List<TagEventData>();
 				var wikiEvents = new List<WikiEventData>();
 				var commentedCommits = new List<CommentedCommitData>();
 
-				BranchData addBranch(string branchName, string repoName)
+				BranchData addBranch(string branchName, string repoName, string sourceRepoName)
 				{
+					sourceRepoName ??= repoName;
 					var branch = new BranchData
 					{
 						Name = branchName,
 						RepoName = repoName,
+						SourceRepoName = sourceRepoName,
+						ForkOwner = repoName == sourceRepoName ? null : repoName.Substring(0, repoName.IndexOf('/')),
 					};
 					branches.Add(branch);
 					return branch;
 				}
 
-				BranchData getOrAddBranch(string branchName, string repoName) =>
-					branches.LastOrDefault(x => x.Name == branchName && x.RepoName == repoName) ?? addBranch(branchName, repoName);
+				BranchData getOrAddBranch(string branchName, string repoName, string sourceRepoName) =>
+					branches.LastOrDefault(x => x.Name == branchName && x.RepoName == repoName) ?? addBranch(branchName, repoName, sourceRepoName);
 
-				foreach (var eventElement in eventElements)
+				foreach (var rawEvent in rawEvents)
 				{
-					var repoName = eventElement.GetProperty("repo", "name").GetString();
-					var actorName = eventElement.GetProperty("actor", "login").GetString();
-					var payload = eventElement.GetProperty("payload");
+					var repoName = rawEvent.Element.GetProperty("repo", "name").GetString();
+					var actorName = rawEvent.ActorName;
+					var payload = rawEvent.Element.GetProperty("payload");
 
-					var eventType = eventElement.GetProperty("type").GetString();
+					var eventType = rawEvent.Element.GetProperty("type").GetString();
 					if (eventType == "PushEvent")
 					{
 						const string branchRefPrefix = "refs/heads/";
@@ -260,7 +273,7 @@ namespace GitHubDigestBuilder
 						if (refName?.StartsWith(branchRefPrefix) == true)
 						{
 							var branchName = refName.Substring(branchRefPrefix.Length);
-							var branch = getOrAddBranch(branchName, repoName);
+							var branch = getOrAddBranch(branchName, repoName, rawEvent.SourceRepoName);
 
 							var beforeSha = payload.TryGetProperty("before")?.GetString();
 							var afterSha = payload.TryGetProperty("head")?.GetString();
@@ -318,7 +331,7 @@ namespace GitHubDigestBuilder
 						if (refType == "branch")
 						{
 							var branchName = payload.GetProperty("ref").GetString();
-							var branch = getOrAddBranch(branchName, repoName);
+							var branch = getOrAddBranch(branchName, repoName, rawEvent.SourceRepoName);
 
 							branch.Events.Add(new BranchEventData
 							{
@@ -390,12 +403,11 @@ namespace GitHubDigestBuilder
 						var number = pullRequest.GetProperty("number").GetInt32();
 						var branchName = pullRequest.GetProperty("head", "ref").GetString();
 						var headRepoName = pullRequest.GetProperty("head", "repo", "full_name").GetString();
-						var branch = getOrAddBranch(branchName, headRepoName);
+						var branch = getOrAddBranch(branchName, headRepoName, rawEvent.SourceRepoName);
 
 						if (branch.PullRequest != null && branch.PullRequest.Number != number)
-							branch = addBranch(branchName, headRepoName);
+							branch = addBranch(branchName, headRepoName, rawEvent.SourceRepoName);
 
-						branch.RepoName = repoName;
 						branch.PullRequest = new PullRequestData
 						{
 							Number = number,
@@ -498,7 +510,7 @@ namespace GitHubDigestBuilder
 					.ThenBy(x => x.PullRequest?.Number ?? 0)
 					.ThenBy(x => x.ForkOwner ?? "", StringComparer.InvariantCulture))
 				{
-					getOrAddRepo(branch.RepoName).Branches.Add(branch);
+					getOrAddRepo(branch.SourceRepoName).Branches.Add(branch);
 				}
 
 				foreach (var tagEvent in tagEvents)
@@ -516,6 +528,7 @@ namespace GitHubDigestBuilder
 					PreviousDate = date.AddDays(-1),
 					BaseUrl = baseUrl,
 					AutoRefresh = autoRefresh,
+					Now = now,
 				};
 
 				report.Repos.AddRange(repos.OrderBy(x => x.Name, StringComparer.InvariantCulture));
