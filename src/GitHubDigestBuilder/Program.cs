@@ -306,6 +306,9 @@ namespace GitHubDigestBuilder
 							var branchName = refName.Substring(branchRefPrefix.Length);
 							var branch = getOrAddBranch(branchName, repoName, sourceRepoName);
 
+							if (branch.PullRequest != null && branch.PullRequest.IsClosed)
+								branch = addBranch(branchName, repoName, sourceRepoName);
+
 							var beforeSha = payload.TryGetProperty("before")?.GetString();
 							var afterSha = payload.TryGetProperty("head")?.GetString();
 							var commitCount = payload.TryGetProperty("size")?.GetInt32() ?? 0;
@@ -463,17 +466,22 @@ namespace GitHubDigestBuilder
 						{
 							BranchData baseBranch = null;
 
-							if (eventKind == "pull-request-closed" && pullRequest.GetProperty("merged").GetBoolean())
+							if (eventKind == "pull-request-closed")
 							{
-								eventKind = "pull-request-merged";
+								branch.PullRequest.IsClosed = true;
 
-								var baseBranchName = pullRequest.GetProperty("base", "ref").GetString();
+								if (pullRequest.GetProperty("merged").GetBoolean())
+								{
+									eventKind = "pull-request-merged";
 
-								var baseRepoName = pullRequest.GetProperty("base", "repo", "full_name").GetString();
-								if (repoName != baseRepoName)
-									throw new InvalidOperationException("Unexpected pull request base.");
+									var baseBranchName = pullRequest.GetProperty("base", "ref").GetString();
 
-								baseBranch = new BranchData { Name = baseBranchName, RepoName = repoName };
+									var baseRepoName = pullRequest.GetProperty("base", "repo", "full_name").GetString();
+									if (repoName != baseRepoName)
+										throw new InvalidOperationException("Unexpected pull request base.");
+
+									baseBranch = new BranchData { Name = baseBranchName, RepoName = repoName };
+								}
 							}
 
 							if (eventType == "PullRequestReviewCommentEvent")
