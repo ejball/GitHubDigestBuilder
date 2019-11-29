@@ -356,7 +356,7 @@ namespace GitHubDigestBuilder
 								Kind = isDelete ? "delete-tag" : "create-tag",
 								RepoName = repoName,
 								ActorName = actorName,
-								TagName = payload.GetProperty("ref").GetString(),
+								Tag = new TagData { Name = payload.GetProperty("ref").GetString(), RepoName = repoName },
 							});
 						}
 					}
