@@ -393,7 +393,7 @@ namespace GitHubDigestBuilder
 
 						var commit = commentedCommits.SingleOrDefault(x => x.Sha == sha);
 						if (commit == null)
-							commentedCommits.Add(commit = new CommentedCommitData { RepoName = repoName, Sha = sha });
+							commentedCommits.Add(commit = new CommentedCommitData { RepoName = repoName, SourceRepoName = rawEvent.SourceRepoName, Sha = sha });
 
 						var conversation = commit.Conversations.SingleOrDefault(x => x.FilePath == filePath && x.Position == position?.ToString());
 						if (conversation == null)
@@ -422,6 +422,7 @@ namespace GitHubDigestBuilder
 							Number = number,
 							RepoName = repoName,
 						};
+						branch.SourceRepoName = repoName;
 
 						var title = pullRequest.TryGetProperty("title")?.GetString();
 						if (title != null)
@@ -529,7 +530,7 @@ namespace GitHubDigestBuilder
 					getOrAddRepo(wikiEvent.RepoName).WikiEvents.Add(wikiEvent);
 
 				foreach (var commentedCommit in commentedCommits)
-					getOrAddRepo(commentedCommit.RepoName).CommentedCommits.Add(commentedCommit);
+					getOrAddRepo(commentedCommit.SourceRepoName).CommentedCommits.Add(commentedCommit);
 
 				var report = new ReportData
 				{

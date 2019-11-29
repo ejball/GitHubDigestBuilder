@@ -6,6 +6,8 @@ namespace GitHubDigestBuilder.Models
 	{
 		public string RepoName { get; set; }
 
+		public string SourceRepoName { get; set; }
+
 		public string Sha { get; set; }
 
 		public List<ConversationData> Conversations { get; } = new List<ConversationData>();
