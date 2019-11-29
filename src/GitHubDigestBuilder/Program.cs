@@ -202,18 +202,39 @@ namespace GitHubDigestBuilder
 							else if (createdUtc < endDateTimeUtc)
 							{
 								var eventId = eventElement.GetProperty("id").GetString();
+								var eventType = eventElement.GetProperty("type").GetString();
 								var actorName = eventElement.GetProperty("actor", "login").GetString();
-								if (handledEventIds.Add(eventId) && !usersToExclude.Contains(actorName))
+								var repoName = eventElement.GetProperty("repo", "name").GetString();
+								var payload = eventElement.GetProperty("payload");
+
+								// skip some events from network (but check event again)
+								var shouldSkipFromNetwork = eventType switch
 								{
-									events.Add(new RawEventData
-									{
-										EventId = eventId,
-										SourceRepoName = sourceName,
-										ActorName = actorName,
-										CreatedUtc = createdUtc,
-										Element = eventElement,
-									});
-								}
+									"CreateEvent" => payload.GetProperty("ref_type").GetString() == "tag",
+									"DeleteEvent" => payload.GetProperty("ref_type").GetString() == "tag",
+									"PullRequestEvent" => true,
+									"PullRequestReviewCommentEvent" => true,
+									_ => false,
+								};
+								if (shouldSkipFromNetwork && repoName != sourceName)
+									continue;
+
+								if (!handledEventIds.Add(eventId))
+									continue;
+
+								if (usersToExclude.Contains(actorName))
+									continue;
+
+								events.Add(new RawEventData
+								{
+									EventId = eventId,
+									EventType = eventType,
+									ActorName = actorName,
+									CreatedUtc = createdUtc,
+									RepoName = repoName,
+									SourceRepoName = sourceName,
+									Payload = payload,
+								});
 							}
 						}
 
@@ -270,11 +291,12 @@ namespace GitHubDigestBuilder
 
 				foreach (var rawEvent in rawEvents)
 				{
-					var repoName = rawEvent.Element.GetProperty("repo", "name").GetString();
+					var repoName = rawEvent.RepoName;
+					var payload = rawEvent.Payload;
+					var eventType = rawEvent.EventType;
+					var sourceRepoName = rawEvent.SourceRepoName;
 					var actorName = rawEvent.ActorName;
-					var payload = rawEvent.Element.GetProperty("payload");
 
-					var eventType = rawEvent.Element.GetProperty("type").GetString();
 					if (eventType == "PushEvent")
 					{
 						const string branchRefPrefix = "refs/heads/";
@@ -282,7 +304,7 @@ namespace GitHubDigestBuilder
 						if (refName?.StartsWith(branchRefPrefix) == true)
 						{
 							var branchName = refName.Substring(branchRefPrefix.Length);
-							var branch = getOrAddBranch(branchName, repoName, rawEvent.SourceRepoName);
+							var branch = getOrAddBranch(branchName, repoName, sourceRepoName);
 
 							var beforeSha = payload.TryGetProperty("before")?.GetString();
 							var afterSha = payload.TryGetProperty("head")?.GetString();
@@ -340,7 +362,7 @@ namespace GitHubDigestBuilder
 						if (refType == "branch")
 						{
 							var branchName = payload.GetProperty("ref").GetString();
-							var branch = getOrAddBranch(branchName, repoName, rawEvent.SourceRepoName);
+							var branch = getOrAddBranch(branchName, repoName, sourceRepoName);
 
 							branch.Events.Add(new BranchEventData
 							{
@@ -393,7 +415,7 @@ namespace GitHubDigestBuilder
 
 						var commit = commentedCommits.SingleOrDefault(x => x.Sha == sha);
 						if (commit == null)
-							commentedCommits.Add(commit = new CommentedCommitData { RepoName = repoName, SourceRepoName = rawEvent.SourceRepoName, Sha = sha });
+							commentedCommits.Add(commit = new CommentedCommitData { RepoName = repoName, SourceRepoName = sourceRepoName, Sha = sha });
 
 						var conversation = commit.Conversations.SingleOrDefault(x => x.FilePath == filePath && x.Position == position?.ToString());
 						if (conversation == null)
@@ -412,10 +434,10 @@ namespace GitHubDigestBuilder
 						var number = pullRequest.GetProperty("number").GetInt32();
 						var branchName = pullRequest.GetProperty("head", "ref").GetString();
 						var headRepoName = pullRequest.GetProperty("head", "repo", "full_name").GetString();
-						var branch = getOrAddBranch(branchName, headRepoName, rawEvent.SourceRepoName);
+						var branch = getOrAddBranch(branchName, headRepoName, sourceRepoName);
 
 						if (branch.PullRequest != null && branch.PullRequest.Number != number)
-							branch = addBranch(branchName, headRepoName, rawEvent.SourceRepoName);
+							branch = addBranch(branchName, headRepoName, sourceRepoName);
 
 						branch.PullRequest = new PullRequestData
 						{
