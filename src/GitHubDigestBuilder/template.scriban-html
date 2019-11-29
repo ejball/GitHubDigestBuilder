@@ -54,7 +54,9 @@ a:hover, a:focus { text-decoration: none }
 {{- else -}}
 <a href="{{ base_url }}/{{ $0.repo_name }}/compare/{{ $0.before_sha }}...{{ $0.after_sha }}">
 {{- end # if -}}
-{{- if $0.commit_count == $0.new_commit_count -}}
+{{- if $0.commit_count >= 100 -}}
+100+ commits</a>
+{{- else if $0.commit_count == $0.new_commit_count -}}
 {{- $0.new_commit_count }} {{ $0.new_commit_count | commits_text }}</a>
 {{- else -}}
 {{- $0.commit_count }} {{ $0.commit_count | commits_text }}</a> ({{ $0.new_commit_count }} new)
@@ -93,7 +95,7 @@ a:hover, a:focus { text-decoration: none }
 {{ for event in branch.events ~}}
 {{ if event.kind == 'push' }}
 <li>{{ event.actor_name | user_link }} pushed {{ event | commits_link }}
-{{ if !event.new_commits.empty? ~}}
+{{ if !event.new_commits.empty? && event.commit_count < 100 ~}}
 <ul class="list-unstyled ml-4">
 {{ for commit in event.new_commits ~}}
 <li class="text-truncate">{{ commit | commit_link }} {{ commit.subject }} <span class="text-muted">{{ commit.remarks }}</span></li>
