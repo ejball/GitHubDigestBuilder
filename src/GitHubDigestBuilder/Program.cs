@@ -492,7 +492,8 @@ namespace GitHubDigestBuilder
 								var filePath = commentElement.GetProperty("path").GetString();
 								var positionBefore = commentElement.GetProperty("original_position").GetNullOrInt32();
 								var positionAfter = commentElement.GetProperty("position").GetNullOrInt32();
-								var position = $"{positionBefore}:{positionAfter}";
+								var position = positionBefore != null ? $"{positionBefore}" : $":{positionAfter}";
+								var body = commentElement.GetProperty("body").GetString();
 
 								var conversation = branch.Events.OfType<BranchEventData>().Select(x => x.Conversation).Where(x => x != null)
 									.SingleOrDefault(x => x.FilePath == filePath && x.Position == position);
@@ -514,7 +515,7 @@ namespace GitHubDigestBuilder
 								{
 									ActorName = actorName,
 									Url = $"{baseUrl}/{repoName}/pull/{number}#discussion_r{commentId}",
-									Body = commentElement.GetProperty("body").GetString(),
+									Body = body,
 								});
 							}
 							else
