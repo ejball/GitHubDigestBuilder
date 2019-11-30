@@ -137,6 +137,9 @@ namespace GitHubDigestBuilder
 
 				async Task addReposForSource(string sourceKind, string sourceName, int sourceIndex)
 				{
+					// add some margin, since some kinds of activity don't cause the repository to be updated
+					var sinceUtc = startDateTimeUtc.AddDays(-7.0);
+
 					var orgRepoNames = new List<string>();
 					var status = await loadPagesAsync($"{sourceKind}/{sourceName}/repos?sort=updated", pageElement =>
 					{
@@ -145,7 +148,7 @@ namespace GitHubDigestBuilder
 						foreach (var repoElement in pageElement.EnumerateArray())
 						{
 							var updatedUtc = ParseDateTime(repoElement.GetProperty("updated_at").GetString());
-							if (updatedUtc < startDateTimeUtc)
+							if (updatedUtc < sinceUtc)
 								foundLastPage = true;
 							else
 								orgRepoNames.Add(repoElement.GetProperty("full_name").GetString());
