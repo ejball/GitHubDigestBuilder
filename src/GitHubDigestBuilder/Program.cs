@@ -122,10 +122,20 @@ namespace GitHubDigestBuilder
 				var baseUrl = (settings.GitHub?.WebUrl ?? "https://github.com").TrimEnd('/');
 
 				// find all source repositories
-				var sourceRepos = settings.Repos ?? new List<RepoSettings>();
+				var settingsRepos = settings.Repos ?? new List<RepoSettings>();
 				var sourceRepoNames = new List<string>();
+				var sourceRepoIndices = new Dictionary<string, int>();
 
-				async Task addReposForSource(string sourceKind, string sourceName)
+				void addRepoForSource(string repoName, int sourceIndex)
+				{
+					if (!sourceRepoIndices.ContainsKey(repoName))
+					{
+						sourceRepoNames.Add(repoName);
+						sourceRepoIndices.Add(repoName, sourceIndex);
+					}
+				}
+
+				async Task addReposForSource(string sourceKind, string sourceName, int sourceIndex)
 				{
 					var orgRepoNames = new List<string>();
 					var status = await loadPagesAsync($"{sourceKind}/{sourceName}/repos?sort=updated", pageElement =>
@@ -143,31 +153,32 @@ namespace GitHubDigestBuilder
 
 						return foundLastPage;
 					});
-					sourceRepoNames.AddRange(orgRepoNames);
+					foreach (var orgRepoName in orgRepoNames)
+						addRepoForSource(orgRepoName, sourceIndex);
 					if (status == DownloadStatus.TooMuchActivity)
 						warnings.Add($"Too many updated repositories found for {sourceName}.");
 					else if (status == DownloadStatus.NotFound)
 						warnings.Add($"Failed to find repositories for {sourceName}.");
 				}
 
-				foreach (var sourceRepo in sourceRepos)
+				foreach (var (settingsRepo, sourceIndex) in settingsRepos.Select((x, i) => (x, i)))
 				{
-					switch (sourceRepo)
+					switch (settingsRepo)
 					{
 					case { Name: string name, User: null, Org: null }:
-						sourceRepoNames.Add(name);
+						addRepoForSource(name, sourceIndex);
 						break;
 
 					case { Name: null, User: string user, Org: null }:
-						await addReposForSource("users", user);
+						await addReposForSource("users", user, sourceIndex);
 						break;
 
 					case { Name: null, User: null, Org: string org }:
-						await addReposForSource("orgs", org);
+						await addReposForSource("orgs", org, sourceIndex);
 						break;
 
 					default:
-						throw new ApplicationException("Invalid repo source: " + JsonSerializer.Serialize(sourceRepo));
+						throw new ApplicationException("Invalid repo source: " + JsonSerializer.Serialize(settingsRepo));
 					}
 				}
 
@@ -572,7 +583,7 @@ namespace GitHubDigestBuilder
 					Now = now,
 				};
 
-				report.Repos.AddRange(repos.OrderBy(x => x.Name, StringComparer.InvariantCulture));
+				report.Repos.AddRange(repos.OrderBy(x => sourceRepoIndices[x.Name]).ThenBy(x => x.Name, StringComparer.InvariantCulture));
 				report.Warnings.AddRange(warnings);
 
 				var culture = settings.Culture == null ? CultureInfo.CurrentCulture : CultureInfo.GetCultureInfo(settings.Culture);
