@@ -8,6 +8,8 @@ namespace GitHubDigestBuilder.Settings
 
 		public List<RepoSettings> Repos { get; set; }
 
+		public List<UserSettings> Users { get; set; }
+
 		public List<FilterSettings> Excludes { get; set; }
 
 		public string OutputDirectory { get; set; }

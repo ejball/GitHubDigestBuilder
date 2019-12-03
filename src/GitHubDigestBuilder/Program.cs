@@ -121,8 +121,6 @@ namespace GitHubDigestBuilder
 
 				var baseUrl = (settings.GitHub?.WebUrl ?? "https://github.com").TrimEnd('/');
 
-				// find all source repositories
-				var settingsRepos = settings.Repos ?? new List<RepoSettings>();
 				var sourceRepoNames = new List<string>();
 				var sourceRepoIndices = new Dictionary<string, int>();
 
@@ -164,6 +162,7 @@ namespace GitHubDigestBuilder
 						warnings.Add($"Failed to find repositories for {sourceName}.");
 				}
 
+				var settingsRepos = settings.Repos ?? new List<RepoSettings>();
 				foreach (var (settingsRepo, sourceIndex) in settingsRepos.Select((x, i) => (x, i)))
 				{
 					switch (settingsRepo)
@@ -182,6 +181,23 @@ namespace GitHubDigestBuilder
 
 					default:
 						throw new ApplicationException("Invalid repo source: " + JsonSerializer.Serialize(settingsRepo));
+					}
+				}
+
+				var sourceUserNames = new List<string>();
+
+				var settingsUsers = settings.Users ?? new List<UserSettings>();
+				foreach (var settingsUser in settingsUsers)
+				{
+					switch (settingsUser)
+					{
+					case { Name: string name }:
+						if (!sourceUserNames.Contains(name))
+							sourceUserNames.Add(name);
+						break;
+
+					default:
+						throw new ApplicationException("Invalid user source: " + JsonSerializer.Serialize(settingsUser));
 					}
 				}
 
@@ -246,7 +262,7 @@ namespace GitHubDigestBuilder
 									ActorName = actorName,
 									CreatedUtc = createdUtc,
 									RepoName = repoName,
-									SourceRepoName = sourceName,
+									SourceRepoName = sourceKind == "users" ? repoName : sourceName,
 									Payload = payload,
 								});
 							}
@@ -263,13 +279,13 @@ namespace GitHubDigestBuilder
 
 				foreach (var sourceRepoName in sourceRepoNames)
 				{
-					var (networkEventElements, networkStatus) = await loadEventsAsync("networks", sourceRepoName);
-					rawEvents.AddRange(networkEventElements);
+					var (rawNetworkEvents, networkStatus) = await loadEventsAsync("networks", sourceRepoName);
+					rawEvents.AddRange(rawNetworkEvents);
 
 					if (networkStatus != DownloadStatus.Success)
 					{
-						var (repoEventElements, repoStatus) = await loadEventsAsync("repos", sourceRepoName);
-						rawEvents.AddRange(repoEventElements);
+						var (rawRepoEvents, repoStatus) = await loadEventsAsync("repos", sourceRepoName);
+						rawEvents.AddRange(rawRepoEvents);
 						if (repoStatus == DownloadStatus.TooMuchActivity)
 							warnings.Add($"{sourceRepoName} repository had too much activity.");
 						else if (networkStatus == DownloadStatus.TooMuchActivity)
@@ -277,6 +293,16 @@ namespace GitHubDigestBuilder
 						else if (repoStatus == DownloadStatus.NotFound)
 							warnings.Add($"{sourceRepoName} repository not found.");
 					}
+				}
+
+				foreach (var sourceUserName in sourceUserNames)
+				{
+					var (rawUserEvents, userStatus) = await loadEventsAsync("users", sourceUserName);
+					rawEvents.AddRange(rawUserEvents);
+					if (userStatus == DownloadStatus.TooMuchActivity)
+						warnings.Add($"{sourceUserName} user had too much activity.");
+					else if (userStatus == DownloadStatus.NotFound)
+						warnings.Add($"{sourceUserName} user not found.");
 				}
 
 				rawEvents = rawEvents.OrderBy(x => x.CreatedUtc).ToList();
@@ -586,7 +612,9 @@ namespace GitHubDigestBuilder
 					Now = now,
 				};
 
-				report.Repos.AddRange(repos.OrderBy(x => sourceRepoIndices[x.Name]).ThenBy(x => x.Name, StringComparer.InvariantCulture));
+				report.Repos.AddRange(repos
+					.OrderBy(x => sourceRepoIndices.TryGetValue(x.Name, out var i) ? i : int.MaxValue)
+					.ThenBy(x => x.Name, StringComparer.InvariantCulture));
 				report.Warnings.AddRange(warnings);
 
 				var culture = settings.Culture == null ? CultureInfo.CurrentCulture : CultureInfo.GetCultureInfo(settings.Culture);
