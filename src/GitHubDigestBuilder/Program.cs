@@ -3,8 +3,11 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
@@ -53,18 +56,9 @@ namespace GitHubDigestBuilder
 
 			try
 			{
-				// prepare dump directory, if any
-				string dumpDirectory = null;
-				if (settings.DumpDirectory != null)
-				{
-					dumpDirectory = Path.Combine(configFileDirectory, settings.DumpDirectory, dateIso);
-					Directory.CreateDirectory(dumpDirectory);
-				}
-
 				// prepare HTTP client
 				var httpClient = new HttpClient();
 				httpClient.DefaultRequestHeaders.UserAgent.Add(ProductInfoHeaderValue.Parse("GitHubDigestBuilder"));
-				httpClient.DefaultRequestHeaders.Accept.Add(MediaTypeWithQualityHeaderValue.Parse("application/vnd.github.v3+json"));
 
 				authToken ??= settings.GitHub?.AuthToken;
 				if (!string.IsNullOrWhiteSpace(authToken))
@@ -73,50 +67,80 @@ namespace GitHubDigestBuilder
 				var apiBase = (settings.GitHub?.ApiUrl ?? "https://api.github.com").TrimEnd('/');
 				var warnings = new List<string>();
 
+				using var sha1 = SHA1.Create();
+				var cacheDirectory = Path.Combine(Path.GetTempPath(), "GitHubDigestBuilder",
+					BitConverter.ToString(sha1.ComputeHash(Encoding.UTF8.GetBytes($"{apiBase} {authToken}"))).Replace("-", "")[..16]);
+				Directory.CreateDirectory(cacheDirectory);
+
 				// don't process the same event twice
 				var handledEventIds = new HashSet<string>();
 
-				async Task<DownloadStatus> loadPagesAsync(string url, Func<JsonElement, bool> processPage)
+				async Task<PagedDownloadResult> loadPagesAsync(string url, int maxPageCount, Func<JsonElement, bool> isLastPage = null)
 				{
-					var dumpName = Regex.Replace(Regex.Replace(url, @"\?.*$", ""), @"/+", "_").Trim('_');
+					var cacheName = Regex.Replace(Regex.Replace(url, @"\?.*$", ""), @"/+", "_").Trim('_');
+					var cacheFile = Path.Combine(cacheDirectory, $"{cacheName}.json");
+					var cacheElement = default(JsonElement);
+					string etag = null;
 
-					var foundLastPage = false;
-					for (var pageNumber = 1; pageNumber <= 10 && !foundLastPage; pageNumber++)
+					if (File.Exists(cacheFile))
 					{
-						JsonDocument pageDocument;
+						await using var cacheStream = File.OpenRead(cacheFile);
+						cacheElement = (await JsonDocument.ParseAsync(cacheStream)).RootElement;
 
-						var dumpFile = dumpDirectory != null ? Path.Combine(dumpDirectory, $"{dumpName}_{pageNumber}.json") : null;
-						if (dumpFile != null && File.Exists(dumpFile))
-						{
-							await using var dumpStream = File.OpenRead(dumpFile);
-							pageDocument = await JsonDocument.ParseAsync(dumpStream);
-						}
-						else
-						{
-							var urlHasParams = url.Contains('?');
-							var request = new HttpRequestMessage(HttpMethod.Get, $"{apiBase}/{url}{(urlHasParams ? '&' : '?')}page={pageNumber}");
-							var response = await httpClient.SendAsync(request);
-
-							if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
-								return DownloadStatus.NotFound;
-							else if (response.StatusCode != System.Net.HttpStatusCode.OK)
-								throw new InvalidOperationException($"Unexpected status code: {response.StatusCode}");
-
-							await using var pageStream = await response.Content.ReadAsStreamAsync();
-							pageDocument = await JsonDocument.ParseAsync(pageStream);
-
-							if (dumpFile != null)
-							{
-								await using var dumpStream = File.Open(dumpFile, FileMode.CreateNew, FileAccess.Write);
-								await using var jsonWriter = new Utf8JsonWriter(dumpStream, new JsonWriterOptions { Indented = true });
-								pageDocument.WriteTo(jsonWriter);
-							}
-						}
-
-						foundLastPage = pageDocument.RootElement.GetArrayLength() == 0 || processPage(pageDocument.RootElement);
+						// don't use the cache if we may have stopped early and we're asking for an older report
+						if (isLastPage == null || string.CompareOrdinal(dateIso, cacheElement.GetProperty("date").GetString()) >= 0)
+							etag = cacheElement.GetProperty("etag").GetString();
 					}
 
-					return foundLastPage ? DownloadStatus.Success : DownloadStatus.TooMuchActivity;
+					var foundLastPage = false;
+					var items = new List<JsonElement>();
+
+					for (var pageNumber = 1; pageNumber <= maxPageCount && !foundLastPage; pageNumber++)
+					{
+						var pageParameter = pageNumber == 1 ? "" : $"{(url.Contains('?') ? '&' : '?')}page={pageNumber}";
+						var request = new HttpRequestMessage(HttpMethod.Get, $"{apiBase}/{url}{pageParameter}");
+						request.Headers.Accept.Add(MediaTypeWithQualityHeaderValue.Parse("application/vnd.github.v3+json"));
+						if (pageNumber == 1 && etag != null)
+							request.Headers.IfNoneMatch.Add(EntityTagHeaderValue.Parse(etag));
+
+						var response = await httpClient.SendAsync(request);
+
+						if (pageNumber == 1 && etag != null && response.StatusCode == HttpStatusCode.NotModified)
+						{
+							return new PagedDownloadResult(
+								Enum.Parse<DownloadStatus>(cacheElement.GetProperty("status").GetString()),
+								cacheElement.GetProperty("items").EnumerateArray().ToList());
+						}
+
+						if (response.StatusCode == HttpStatusCode.NotFound)
+							return new PagedDownloadResult(DownloadStatus.NotFound);
+
+						if (response.StatusCode != HttpStatusCode.OK)
+							throw new InvalidOperationException($"Unexpected status code: {response.StatusCode}");
+
+						if (pageNumber == 1)
+							etag = response.Headers.ETag.Tag;
+
+						await using var pageStream = await response.Content.ReadAsStreamAsync();
+						var pageDocument = await JsonDocument.ParseAsync(pageStream);
+
+						foundLastPage = pageDocument.RootElement.GetArrayLength() == 0 || isLastPage?.Invoke(pageDocument.RootElement) == true;
+						items.AddRange(pageDocument.RootElement.EnumerateArray());
+					}
+
+					var status = foundLastPage ? DownloadStatus.Success : DownloadStatus.TooMuchActivity;
+					{
+						await using var cacheStream = File.Open(cacheFile, FileMode.Create, FileAccess.Write);
+						await JsonSerializer.SerializeAsync(cacheStream, new
+						{
+							status = status.ToString(),
+							etag,
+							date = dateIso,
+							items,
+						});
+					}
+
+					return new PagedDownloadResult(status, items);
 				}
 
 				var baseUrl = (settings.GitHub?.WebUrl ?? "https://github.com").TrimEnd('/');
@@ -135,30 +159,18 @@ namespace GitHubDigestBuilder
 
 				async Task addReposForSource(string sourceKind, string sourceName, int sourceIndex)
 				{
-					// add some margin, since some kinds of activity don't cause the repository to be updated
-					var sinceUtc = startDateTimeUtc.AddDays(-7.0);
+					var orgRepoNames = new HashSet<string>();
+					var result = await loadPagesAsync($"{sourceKind}/{sourceName}/repos?sort=updated&per_page=100", maxPageCount: 100);
 
-					var orgRepoNames = new List<string>();
-					var status = await loadPagesAsync($"{sourceKind}/{sourceName}/repos?sort=updated", pageElement =>
-					{
-						var foundLastPage = false;
+					foreach (var element in result.Elements)
+						orgRepoNames.Add(element.GetProperty("full_name").GetString());
 
-						foreach (var repoElement in pageElement.EnumerateArray())
-						{
-							var updatedUtc = ParseDateTime(repoElement.GetProperty("updated_at").GetString());
-							if (updatedUtc < sinceUtc)
-								foundLastPage = true;
-							else
-								orgRepoNames.Add(repoElement.GetProperty("full_name").GetString());
-						}
-
-						return foundLastPage;
-					});
 					foreach (var orgRepoName in orgRepoNames)
 						addRepoForSource(orgRepoName, sourceIndex);
-					if (status == DownloadStatus.TooMuchActivity)
+
+					if (result.Status == DownloadStatus.TooMuchActivity)
 						warnings.Add($"Too many updated repositories found for {sourceName}.");
-					else if (status == DownloadStatus.NotFound)
+					else if (result.Status == DownloadStatus.NotFound)
 						warnings.Add($"Failed to find repositories for {sourceName}.");
 				}
 
@@ -218,61 +230,53 @@ namespace GitHubDigestBuilder
 				async Task<(IReadOnlyList<RawEventData> Events, DownloadStatus Status)> loadEventsAsync(string sourceKind, string sourceName)
 				{
 					var events = new List<RawEventData>();
-					var status = await loadPagesAsync($"{sourceKind}/{sourceName}/events", pageElement =>
+					var result = await loadPagesAsync($"{sourceKind}/{sourceName}/events", maxPageCount: 10,
+						isLastPage: page => page.EnumerateArray().Any(x => ParseDateTime(x.GetProperty("created_at").GetString()) < startDateTimeUtc));
+
+					foreach (var eventElement in result.Elements)
 					{
-						var foundLastPage = false;
-
-						foreach (var eventElement in pageElement.EnumerateArray())
+						var createdUtc = ParseDateTime(eventElement.GetProperty("created_at").GetString());
+						if (createdUtc >= startDateTimeUtc && createdUtc < endDateTimeUtc)
 						{
-							var createdUtc = ParseDateTime(eventElement.GetProperty("created_at").GetString());
-							if (createdUtc < startDateTimeUtc)
+							var eventId = eventElement.GetProperty("id").GetString();
+							var eventType = eventElement.GetProperty("type").GetString();
+							var actorName = eventElement.GetProperty("actor", "login").GetString();
+							var repoName = eventElement.GetProperty("repo", "name").GetString();
+							var payload = eventElement.GetProperty("payload");
+
+							// skip some events from network (but check event again)
+							var shouldSkipFromNetwork = eventType switch
 							{
-								foundLastPage = true;
-							}
-							else if (createdUtc < endDateTimeUtc)
+								"CreateEvent" => payload.GetProperty("ref_type").GetString() == "tag",
+								"DeleteEvent" => payload.GetProperty("ref_type").GetString() == "tag",
+								"PullRequestEvent" => true,
+								"PullRequestReviewCommentEvent" => true,
+								_ => false,
+							};
+							if (shouldSkipFromNetwork && repoName != sourceName)
+								continue;
+
+							if (!handledEventIds.Add(eventId))
+								continue;
+
+							if (usersToExclude.Contains(actorName))
+								continue;
+
+							events.Add(new RawEventData
 							{
-								var eventId = eventElement.GetProperty("id").GetString();
-								var eventType = eventElement.GetProperty("type").GetString();
-								var actorName = eventElement.GetProperty("actor", "login").GetString();
-								var repoName = eventElement.GetProperty("repo", "name").GetString();
-								var payload = eventElement.GetProperty("payload");
-
-								// skip some events from network (but check event again)
-								var shouldSkipFromNetwork = eventType switch
-								{
-									"CreateEvent" => payload.GetProperty("ref_type").GetString() == "tag",
-									"DeleteEvent" => payload.GetProperty("ref_type").GetString() == "tag",
-									"PullRequestEvent" => true,
-									"PullRequestReviewCommentEvent" => true,
-									_ => false,
-								};
-								if (shouldSkipFromNetwork && repoName != sourceName)
-									continue;
-
-								if (!handledEventIds.Add(eventId))
-									continue;
-
-								if (usersToExclude.Contains(actorName))
-									continue;
-
-								events.Add(new RawEventData
-								{
-									EventId = eventId,
-									EventType = eventType,
-									ActorName = actorName,
-									CreatedUtc = createdUtc,
-									RepoName = repoName,
-									SourceRepoName = sourceKind == "users" ? repoName : sourceName,
-									Payload = payload,
-								});
-							}
+								EventId = eventId,
+								EventType = eventType,
+								ActorName = actorName,
+								CreatedUtc = createdUtc,
+								RepoName = repoName,
+								SourceRepoName = sourceKind == "users" ? repoName : sourceName,
+								Payload = payload,
+							});
 						}
-
-						return foundLastPage;
-					});
+					}
 
 					events.Reverse();
-					return (events, status);
+					return (events, result.Status);
 				}
 
 				var rawEvents = new List<RawEventData>();
@@ -702,6 +706,19 @@ namespace GitHubDigestBuilder
 			Success,
 			NotFound,
 			TooMuchActivity,
+		}
+
+		private sealed class PagedDownloadResult
+		{
+			public PagedDownloadResult(DownloadStatus status, IReadOnlyList<JsonElement> elements = null)
+			{
+				Status = status;
+				Elements = elements ?? Array.Empty<JsonElement>();
+			}
+
+			public DownloadStatus Status { get; }
+
+			public IReadOnlyList<JsonElement> Elements { get; }
 		}
 	}
 }
