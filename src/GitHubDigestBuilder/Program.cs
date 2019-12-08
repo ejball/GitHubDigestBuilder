@@ -137,7 +137,7 @@ namespace GitHubDigestBuilder
 							etag,
 							date = dateIso,
 							items,
-						});
+						}, new JsonSerializerOptions { WriteIndented = true });
 					}
 
 					return new PagedDownloadResult(status, items);
