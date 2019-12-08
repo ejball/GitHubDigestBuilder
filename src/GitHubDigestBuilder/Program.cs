@@ -45,6 +45,7 @@ namespace GitHubDigestBuilder
 			// determine date/time range in UTC
 			var timeZoneOffset = settings.TimeZoneOffsetHours != null ? TimeSpan.FromHours(settings.TimeZoneOffsetHours.Value) : DateTimeOffset.Now.Offset;
 			var now = new DateTimeOffset(DateTime.UtcNow).ToOffset(timeZoneOffset);
+			var todayIso = now.Date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
 			var date = dateString != null ? ParseDate(dateString) : now.Date.AddDays(-1.0);
 			var dateIso = date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
 			var startDateTimeUtc = new DateTimeOffset(date.Year, date.Month, date.Day, 0, 0, 0, timeZoneOffset).UtcDateTime;
@@ -87,8 +88,17 @@ namespace GitHubDigestBuilder
 						await using var cacheStream = File.OpenRead(cacheFile);
 						cacheElement = (await JsonDocument.ParseAsync(cacheStream)).RootElement;
 
+						// if we're asking for the same date, and the date is not today, assume the data is still good
+						var cacheDateIso = cacheElement.GetProperty("date").GetString();
+						if (cacheDateIso == dateIso && dateIso != todayIso)
+						{
+							return new PagedDownloadResult(
+								Enum.Parse<DownloadStatus>(cacheElement.GetProperty("status").GetString()),
+								cacheElement.GetProperty("items").EnumerateArray().ToList());
+						}
+
 						// don't use the cache if we may have stopped early and we're asking for an older report
-						if (isLastPage == null || string.CompareOrdinal(dateIso, cacheElement.GetProperty("date").GetString()) >= 0)
+						if (isLastPage == null || string.CompareOrdinal(dateIso, cacheDateIso) >= 0)
 							etag = cacheElement.GetProperty("etag").GetString();
 					}
 
@@ -323,22 +333,38 @@ namespace GitHubDigestBuilder
 				var wikiEvents = new List<WikiEventData>();
 				var commentedCommits = new List<CommentedCommitData>();
 
-				BranchData addBranch(string branchName, string repoName, string sourceRepoName)
+				void updateBranch(BranchData branch, string branchName, string repoName, string sourceRepoName, int? pullRequestNumber = null)
 				{
 					sourceRepoName ??= repoName;
-					var branch = new BranchData
-					{
-						Name = branchName,
-						RepoName = repoName,
-						SourceRepoName = sourceRepoName,
-						ForkOwner = repoName == sourceRepoName ? null : repoName.Substring(0, repoName.IndexOf('/')),
-					};
+
+					branch.Name ??= branchName;
+					branch.RepoName ??= repoName;
+					branch.SourceRepoName ??= sourceRepoName;
+					branch.ForkOwner ??= repoName == null || repoName == sourceRepoName ? null : repoName.Substring(0, repoName.IndexOf('/'));
+				}
+
+				BranchData addBranch(string branchName, string repoName, string sourceRepoName, int? pullRequestNumber = null)
+				{
+					var branch = new BranchData();
+					updateBranch(branch, branchName, repoName, sourceRepoName, pullRequestNumber);
 					branches.Add(branch);
 					return branch;
 				}
 
-				BranchData getOrAddBranch(string branchName, string repoName, string sourceRepoName) =>
-					branches.LastOrDefault(x => x.Name == branchName && x.RepoName == repoName) ?? addBranch(branchName, repoName, sourceRepoName);
+				BranchData getOrAddBranch(string branchName, string repoName, string sourceRepoName, int? pullRequestNumber = null)
+				{
+					var branch = branches.LastOrDefault(x => x.RepoName == repoName && (x.Name == branchName || (pullRequestNumber != null && x.PullRequest?.Number == pullRequestNumber)));
+
+					if (pullRequestNumber != null && branch?.PullRequest != null && branch.PullRequest.Number != pullRequestNumber)
+						branch = null;
+
+					if (branch == null)
+						branch = addBranch(branchName, repoName, sourceRepoName, pullRequestNumber);
+
+					updateBranch(branch, branchName, repoName, sourceRepoName, pullRequestNumber);
+
+					return branch;
+				}
 
 				foreach (var rawEvent in rawEvents)
 				{
@@ -482,38 +508,42 @@ namespace GitHubDigestBuilder
 							Body = data.GetProperty("body").GetString(),
 						});
 					}
-					else if (eventType == "PullRequestEvent" || eventType == "PullRequestReviewCommentEvent")
+					else if (eventType == "PullRequestEvent" || eventType == "PullRequestReviewCommentEvent" || eventType == "IssueCommentEvent")
 					{
-						var pullRequest = payload.GetProperty("pull_request");
-						var number = pullRequest.GetProperty("number").GetInt32();
-						var branchName = pullRequest.GetProperty("head", "ref").GetString();
-						var headRepoName = pullRequest.GetProperty("head", "repo", "full_name").GetString();
-						var branch = getOrAddBranch(branchName, headRepoName, sourceRepoName);
+						var pullRequest = payload.TryGetProperty("pull_request");
+						var issue = payload.TryGetProperty("issue");
+						var pullRequestOrIssue = pullRequest ?? issue ?? throw new InvalidOperationException("Missing pull request or issue.");
+						var number = pullRequestOrIssue.GetProperty("number").GetInt32();
+						var branchName = pullRequest?.GetProperty("head", "ref").GetString();
+						var headRepoName = pullRequest?.GetProperty("head", "repo", "full_name").GetString();
+						var branch = getOrAddBranch(branchName, headRepoName, sourceRepoName, number);
 
-						if (branch.PullRequest != null && branch.PullRequest.Number != number)
-							branch = addBranch(branchName, headRepoName, sourceRepoName);
-
-						branch.PullRequest = new PullRequestData
+						branch.PullRequest ??= new PullRequestData
 						{
 							Number = number,
 							RepoName = repoName,
 						};
 						branch.SourceRepoName = repoName;
 
-						var title = pullRequest.TryGetProperty("title")?.GetString();
+						var title = pullRequestOrIssue.TryGetProperty("title")?.GetString();
 						if (title != null)
 							branch.PullRequest.Title = title;
+
+						var body = pullRequestOrIssue.TryGetProperty("body")?.GetString();
+						if (title != null)
+							branch.PullRequest.Body = body;
 
 						var eventKindPrefix = eventType switch
 						{
 							"PullRequestEvent" => "pull-request-",
 							"PullRequestReviewCommentEvent" => "pull-request-review-comment-",
+							"IssueCommentEvent" => "pull-request-comment-",
 							_ => throw new InvalidOperationException(),
 						};
 						var eventKind = eventKindPrefix + payload.GetProperty("action").GetString();
 
 						if (eventKind == "pull-request-opened" || eventKind == "pull-request-closed" ||
-							eventKind == "pull-request-review-comment-created" || eventKind == "pull-request-review-comment-edited")
+							eventKind == "pull-request-comment-created" || eventKind == "pull-request-review-comment-created")
 						{
 							BranchData baseBranch = null;
 
@@ -521,13 +551,13 @@ namespace GitHubDigestBuilder
 							{
 								branch.PullRequest.IsClosed = true;
 
-								if (pullRequest.GetProperty("merged").GetBoolean())
+								if (pullRequest.Value.GetProperty("merged").GetBoolean())
 								{
 									eventKind = "pull-request-merged";
 
-									var baseBranchName = pullRequest.GetProperty("base", "ref").GetString();
+									var baseBranchName = pullRequest.Value.GetProperty("base", "ref").GetString();
 
-									var baseRepoName = pullRequest.GetProperty("base", "repo", "full_name").GetString();
+									var baseRepoName = pullRequest.Value.GetProperty("base", "repo", "full_name").GetString();
 									if (repoName != baseRepoName)
 										throw new InvalidOperationException("Unexpected pull request base.");
 
@@ -535,19 +565,27 @@ namespace GitHubDigestBuilder
 								}
 							}
 
-							if (eventType == "PullRequestReviewCommentEvent")
+							if (eventKind == "pull-request-comment-created" || eventKind == "pull-request-review-comment-created")
 							{
 								var commentElement = payload.GetProperty("comment");
 								var commentId = commentElement.GetProperty("id").GetInt32();
+								var commentBody = commentElement.GetProperty("body").GetString();
 
-								var filePath = commentElement.GetProperty("path").GetString();
-								var positionBefore = commentElement.GetProperty("original_position").GetNullOrInt32();
-								var positionAfter = commentElement.GetProperty("position").GetNullOrInt32();
-								var position = positionBefore != null ? $"{positionBefore}" : $":{positionAfter}";
-								var body = commentElement.GetProperty("body").GetString();
+								ConversationData conversation = null;
+								string filePath = null;
+								string position = null;
 
-								var conversation = branch.Events.OfType<BranchEventData>().Select(x => x.Conversation).Where(x => x != null)
-									.SingleOrDefault(x => x.FilePath == filePath && x.Position == position);
+								if (eventType == "PullRequestReviewCommentEvent")
+								{
+									filePath = commentElement.GetProperty("path").GetString();
+									var positionBefore = commentElement.GetProperty("original_position").GetNullOrInt32();
+									var positionAfter = commentElement.GetProperty("position").GetNullOrInt32();
+									position = positionBefore != null ? $"{positionBefore}" : $":{positionAfter}";
+
+									conversation = branch.Events.OfType<BranchEventData>().Select(x => x.Conversation).Where(x => x != null)
+										.SingleOrDefault(x => x.FilePath == filePath && x.Position == position);
+								}
+
 								if (conversation == null)
 								{
 									conversation = new ConversationData { FilePath = filePath, Position = position };
@@ -562,11 +600,12 @@ namespace GitHubDigestBuilder
 									};
 									branch.Events.Add(branchEvent);
 								}
+
 								conversation.Comments.Add(new CommentData
 								{
 									ActorName = actorName,
-									Url = $"{baseUrl}/{repoName}/pull/{number}#discussion_r{commentId}",
-									Body = body,
+									Url = $"{baseUrl}/{repoName}/pull/{number}#{(eventType == "PullRequestReviewCommentEvent" ? "discussion_r" : "issuecomment-")}{commentId}",
+									Body = commentBody,
 								});
 							}
 							else
