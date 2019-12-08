@@ -23,25 +23,17 @@ a:hover, a:focus { text-decoration: none }
 <a href="{{ base_url }}/{{ $0.name | html.escape }}">{{ $0.name | html.escape }}</a>
 {{- end # func ~}}
 
-{{- func branch_no_link -}}
-{{- if $0.fork_owner }}{{ $0.fork_owner | html.escape }}:{{ end }}{{ $0.name | html.escape }}
-{{- end # func ~}}
-
 {{- func branch_link -}}
 <a href="{{ base_url }}/{{ $0.repo_name }}/tree/{{ $0.name | html.escape }}">
-{{- $0 | branch_no_link }}</a>
+{{- if $0.fork_owner }}{{ $0.fork_owner | html.escape }}:{{ end }}{{ $0.name | html.escape }}</a>
 {{- end # func ~}}
 
 {{- func pull_request_link -}}
 <a href="{{ base_url }}/{{ $0.repo_name }}/pull/{{ $0.number }}">#{{ $0.number }}</a>
 {{- end # func ~}}
 
-{{- func tag_no_link -}}
-{{ $0.name | html.escape }}
-{{- end # func ~}}
-
 {{- func tag_link -}}
-<a href="{{ base_url }}/{{ $0.repo_name }}/tree/{{ $0.name | html.escape }}">{{ $0 | tag_no_link }}</a>
+<a href="{{ base_url }}/{{ $0.repo_name }}/tree/{{ $0.name | html.escape }}">{{ $0.name | html.escape }}</a>
 {{- end # func ~}}
 
 {{- func wiki_link -}}
@@ -113,8 +105,6 @@ a:hover, a:focus { text-decoration: none }
 </li>
 {{ else if event.kind == 'create-branch' ~}}
 <li class="text-truncate">{{ event.actor_name | user_link }} created branch {{ branch | branch_link }}</li>
-{{ else if event.kind == 'delete-branch' ~}}
-<li class="text-truncate">{{ event.actor_name | user_link }} deleted branch {{ branch | branch_no_link }}</li>
 {{ else if event.kind == 'pull-request-opened' ~}}
 <li class="text-truncate">{{ event.actor_name | user_link }} opened pull request {{ branch.pull_request | pull_request_link }}</li>
 {{ if !branch.pull_request.body.empty? ~}}
@@ -150,8 +140,6 @@ a:hover, a:focus { text-decoration: none }
 {{ for event in repo.tag_events ~}}
 {{ if event.kind == 'create-tag' ~}}
 <li class="text-truncate">{{ event.actor_name | user_link }} created tag {{ event.tag | tag_link }}</li>
-{{ else if event.kind == 'delete-tag' ~}}
-<li class="text-truncate">{{ event.actor_name | user_link }} deleted tag {{ event.tag | tag_no_link }}</li>
 {{ else ~}}
 <li class="text-truncate">{{ event.actor_name | user_link }} <code>{{ event.kind }}</code></li>
 {{ end # if event.kind ~}}

@@ -434,10 +434,8 @@ namespace GitHubDigestBuilder
 							}
 						}
 					}
-					else if (eventType == "CreateEvent" || eventType == "DeleteEvent")
+					else if (eventType == "CreateEvent")
 					{
-						var isDelete = eventType == "DeleteEvent";
-
 						var refType = payload.GetProperty("ref_type").GetString();
 						if (refType == "branch")
 						{
@@ -446,7 +444,7 @@ namespace GitHubDigestBuilder
 
 							branch.Events.Add(new BranchEventData
 							{
-								Kind = isDelete ? "delete-branch" : "create-branch",
+								Kind = "create-branch",
 								RepoName = repoName,
 								ActorName = actorName,
 							});
@@ -455,7 +453,7 @@ namespace GitHubDigestBuilder
 						{
 							tagEvents.Add(new TagEventData
 							{
-								Kind = isDelete ? "delete-tag" : "create-tag",
+								Kind = "create-tag",
 								RepoName = repoName,
 								ActorName = actorName,
 								Tag = new TagData { Name = payload.GetProperty("ref").GetString(), RepoName = repoName },
