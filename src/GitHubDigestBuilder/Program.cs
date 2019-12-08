@@ -333,7 +333,7 @@ namespace GitHubDigestBuilder
 				var wikiEvents = new List<WikiEventData>();
 				var commentedCommits = new List<CommentedCommitData>();
 
-				void updateBranch(BranchData branch, string branchName, string repoName, string sourceRepoName, int? pullRequestNumber = null)
+				void updateBranch(BranchData branch, string branchName, string repoName, string sourceRepoName, int? pullRequestNumber = null, string pullRequestRepoName = null)
 				{
 					sourceRepoName ??= repoName;
 
@@ -341,27 +341,38 @@ namespace GitHubDigestBuilder
 					branch.RepoName ??= repoName;
 					branch.SourceRepoName ??= sourceRepoName;
 					branch.ForkOwner ??= repoName == null || repoName == sourceRepoName ? null : repoName.Substring(0, repoName.IndexOf('/'));
+
+					if (pullRequestNumber != null)
+					{
+						branch.PullRequest ??= new PullRequestData
+						{
+							Number = pullRequestNumber.Value,
+							RepoName = pullRequestRepoName,
+						};
+						branch.SourceRepoName = pullRequestRepoName;
+					}
 				}
 
-				BranchData addBranch(string branchName, string repoName, string sourceRepoName, int? pullRequestNumber = null)
+				BranchData addBranch(string branchName, string repoName, string sourceRepoName, int? pullRequestNumber = null, string pullRequestRepoName = null)
 				{
 					var branch = new BranchData();
-					updateBranch(branch, branchName, repoName, sourceRepoName, pullRequestNumber);
+					updateBranch(branch, branchName, repoName, sourceRepoName, pullRequestNumber, pullRequestRepoName);
 					branches.Add(branch);
 					return branch;
 				}
 
-				BranchData getOrAddBranch(string branchName, string repoName, string sourceRepoName, int? pullRequestNumber = null)
+				BranchData getOrAddBranch(string branchName, string repoName, string sourceRepoName, int? pullRequestNumber = null, string pullRequestRepoName = null)
 				{
-					var branch = branches.LastOrDefault(x => x.RepoName == repoName && (x.Name == branchName || (pullRequestNumber != null && x.PullRequest?.Number == pullRequestNumber)));
+					var branch = branches.LastOrDefault(x => (repoName != null && branchName != null && x.RepoName == repoName && x.Name == branchName) ||
+						(pullRequestNumber != null && pullRequestRepoName != null && x.PullRequest?.Number == pullRequestNumber && x.PullRequest?.RepoName == pullRequestRepoName));
 
 					if (pullRequestNumber != null && branch?.PullRequest != null && branch.PullRequest.Number != pullRequestNumber)
 						branch = null;
 
 					if (branch == null)
-						branch = addBranch(branchName, repoName, sourceRepoName, pullRequestNumber);
+						branch = addBranch(branchName, repoName, sourceRepoName, pullRequestNumber, pullRequestRepoName);
 
-					updateBranch(branch, branchName, repoName, sourceRepoName, pullRequestNumber);
+					updateBranch(branch, branchName, repoName, sourceRepoName, pullRequestNumber, pullRequestRepoName);
 
 					return branch;
 				}
@@ -514,14 +525,7 @@ namespace GitHubDigestBuilder
 						var number = pullRequestOrIssue.GetProperty("number").GetInt32();
 						var branchName = pullRequest?.GetProperty("head", "ref").GetString();
 						var headRepoName = pullRequest?.GetProperty("head", "repo", "full_name").GetString();
-						var branch = getOrAddBranch(branchName, headRepoName, sourceRepoName, number);
-
-						branch.PullRequest ??= new PullRequestData
-						{
-							Number = number,
-							RepoName = repoName,
-						};
-						branch.SourceRepoName = repoName;
+						var branch = getOrAddBranch(branchName, headRepoName, sourceRepoName, number, repoName);
 
 						var title = pullRequestOrIssue.TryGetProperty("title")?.GetString();
 						if (title != null)
