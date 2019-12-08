@@ -162,8 +162,15 @@ namespace GitHubDigestBuilder
 					var orgRepoNames = new HashSet<string>();
 					var result = await loadPagesAsync($"{sourceKind}/{sourceName}/repos?sort=updated&per_page=100", maxPageCount: 100);
 
-					foreach (var element in result.Elements)
-						orgRepoNames.Add(element.GetProperty("full_name").GetString());
+					foreach (var repoElement in result.Elements)
+					{
+						if (!repoElement.GetProperty("private").GetBoolean() &&
+							!repoElement.GetProperty("archived").GetBoolean() &&
+							!repoElement.GetProperty("disabled").GetBoolean())
+						{
+							orgRepoNames.Add(repoElement.GetProperty("full_name").GetString());
+						}
+					}
 
 					foreach (var orgRepoName in orgRepoNames)
 						addRepoForSource(orgRepoName, sourceIndex);
