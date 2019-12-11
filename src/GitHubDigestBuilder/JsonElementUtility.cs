@@ -16,7 +16,7 @@ namespace GitHubDigestBuilder
 		{
 			foreach (var name in names)
 			{
-				if (!element.TryGetProperty(name, out element))
+				if (!element.TryGetProperty(name, out element) || element.ValueKind == JsonValueKind.Null)
 					return null;
 			}
 

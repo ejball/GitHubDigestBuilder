@@ -524,7 +524,9 @@ namespace GitHubDigestBuilder
 						var pullRequestOrIssue = pullRequest ?? issue ?? throw new InvalidOperationException("Missing pull request or issue.");
 						var number = pullRequestOrIssue.GetProperty("number").GetInt32();
 						var branchName = pullRequest?.GetProperty("head", "ref").GetString();
-						var headRepoName = pullRequest?.GetProperty("head", "repo", "full_name").GetString();
+						var headRepoName = pullRequest?.TryGetProperty("head", "repo", "full_name")?.GetString();
+						if (headRepoName == null)
+							continue;
 						var branch = getOrAddBranch(branchName, headRepoName, sourceRepoName, number, repoName);
 
 						var title = pullRequestOrIssue.TryGetProperty("title")?.GetString();
