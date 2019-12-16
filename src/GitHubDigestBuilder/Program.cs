@@ -32,6 +32,8 @@ namespace GitHubDigestBuilder
 			args.VerifyComplete();
 
 			// find config file
+			if (configFilePath == null)
+				throw new ApplicationException("Missing configuration file.");
 			configFilePath = Path.GetFullPath(configFilePath);
 			if (!File.Exists(configFilePath))
 				throw new ApplicationException("Configuration file not found.");
