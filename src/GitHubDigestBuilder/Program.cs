@@ -261,18 +261,6 @@ namespace GitHubDigestBuilder
 							var repoName = eventElement.GetProperty("repo", "name").GetString();
 							var payload = eventElement.GetProperty("payload");
 
-							// skip some events from network (but check event again)
-							var shouldSkipFromNetwork = eventType switch
-							{
-								"CreateEvent" => payload.GetProperty("ref_type").GetString() == "tag",
-								"DeleteEvent" => payload.GetProperty("ref_type").GetString() == "tag",
-								"PullRequestEvent" => true,
-								"PullRequestReviewCommentEvent" => true,
-								_ => false,
-							};
-							if (shouldSkipFromNetwork && repoName != sourceName)
-								continue;
-
 							if (!handledEventIds.Add(eventId))
 								continue;
 
@@ -286,7 +274,6 @@ namespace GitHubDigestBuilder
 								ActorName = actorName,
 								CreatedUtc = createdUtc,
 								RepoName = repoName,
-								SourceRepoName = sourceKind == "users" ? repoName : sourceName,
 								Payload = payload,
 							});
 						}
@@ -300,20 +287,12 @@ namespace GitHubDigestBuilder
 
 				foreach (var sourceRepoName in sourceRepoNames)
 				{
-					var (rawNetworkEvents, networkStatus) = await loadEventsAsync("networks", sourceRepoName);
-					rawEvents.AddRange(rawNetworkEvents);
-
-					if (networkStatus != DownloadStatus.Success)
-					{
-						var (rawRepoEvents, repoStatus) = await loadEventsAsync("repos", sourceRepoName);
-						rawEvents.AddRange(rawRepoEvents);
-						if (repoStatus == DownloadStatus.TooMuchActivity)
-							warnings.Add($"{sourceRepoName} repository had too much activity.");
-						else if (networkStatus == DownloadStatus.TooMuchActivity)
-							warnings.Add($"{sourceRepoName} repository network had too much activity.");
-						else if (repoStatus == DownloadStatus.NotFound)
-							warnings.Add($"{sourceRepoName} repository not found.");
-					}
+					var (rawRepoEvents, repoStatus) = await loadEventsAsync("repos", sourceRepoName);
+					rawEvents.AddRange(rawRepoEvents);
+					if (repoStatus == DownloadStatus.TooMuchActivity)
+						warnings.Add($"{sourceRepoName} repository had too much activity.");
+					else if (repoStatus == DownloadStatus.NotFound)
+						warnings.Add($"{sourceRepoName} repository not found.");
 				}
 
 				foreach (var sourceUserName in sourceUserNames)
@@ -333,14 +312,10 @@ namespace GitHubDigestBuilder
 				var wikiEvents = new List<WikiEventData>();
 				var commentedCommits = new List<CommentedCommitData>();
 
-				void updateBranch(BranchData branch, string branchName, string repoName, string sourceRepoName, int? pullRequestNumber = null, string pullRequestRepoName = null)
+				void updateBranch(BranchData branch, string branchName, string repoName, int? pullRequestNumber = null, string pullRequestRepoName = null)
 				{
-					sourceRepoName ??= repoName;
-
 					branch.Name ??= branchName;
 					branch.RepoName ??= repoName;
-					branch.SourceRepoName ??= sourceRepoName;
-					branch.ForkOwner ??= repoName == null || repoName == sourceRepoName ? null : repoName.Substring(0, repoName.IndexOf('/'));
 
 					if (pullRequestNumber != null)
 					{
@@ -349,19 +324,18 @@ namespace GitHubDigestBuilder
 							Number = pullRequestNumber.Value,
 							RepoName = pullRequestRepoName,
 						};
-						branch.SourceRepoName = pullRequestRepoName;
 					}
 				}
 
-				BranchData addBranch(string branchName, string repoName, string sourceRepoName, int? pullRequestNumber = null, string pullRequestRepoName = null)
+				BranchData addBranch(string branchName, string repoName, int? pullRequestNumber = null, string pullRequestRepoName = null)
 				{
 					var branch = new BranchData();
-					updateBranch(branch, branchName, repoName, sourceRepoName, pullRequestNumber, pullRequestRepoName);
+					updateBranch(branch, branchName, repoName, pullRequestNumber, pullRequestRepoName);
 					branches.Add(branch);
 					return branch;
 				}
 
-				BranchData getOrAddBranch(string branchName, string repoName, string sourceRepoName, int? pullRequestNumber = null, string pullRequestRepoName = null)
+				BranchData getOrAddBranch(string branchName, string repoName, int? pullRequestNumber = null, string pullRequestRepoName = null)
 				{
 					var branch = branches.LastOrDefault(x => (repoName != null && branchName != null && x.RepoName == repoName && x.Name == branchName) ||
 						(pullRequestNumber != null && pullRequestRepoName != null && x.PullRequest?.Number == pullRequestNumber && x.PullRequest?.RepoName == pullRequestRepoName));
@@ -370,9 +344,9 @@ namespace GitHubDigestBuilder
 						branch = null;
 
 					if (branch == null)
-						branch = addBranch(branchName, repoName, sourceRepoName, pullRequestNumber, pullRequestRepoName);
+						branch = addBranch(branchName, repoName, pullRequestNumber, pullRequestRepoName);
 
-					updateBranch(branch, branchName, repoName, sourceRepoName, pullRequestNumber, pullRequestRepoName);
+					updateBranch(branch, branchName, repoName, pullRequestNumber, pullRequestRepoName);
 
 					return branch;
 				}
@@ -382,7 +356,6 @@ namespace GitHubDigestBuilder
 					var repoName = rawEvent.RepoName;
 					var payload = rawEvent.Payload;
 					var eventType = rawEvent.EventType;
-					var sourceRepoName = rawEvent.SourceRepoName;
 					var actorName = rawEvent.ActorName;
 
 					if (eventType == "PushEvent")
@@ -392,10 +365,10 @@ namespace GitHubDigestBuilder
 						if (refName?.StartsWith(branchRefPrefix) == true)
 						{
 							var branchName = refName.Substring(branchRefPrefix.Length);
-							var branch = getOrAddBranch(branchName, repoName, sourceRepoName);
+							var branch = getOrAddBranch(branchName, repoName);
 
 							if (branch.PullRequest != null && branch.PullRequest.IsClosed)
-								branch = addBranch(branchName, repoName, sourceRepoName);
+								branch = addBranch(branchName, repoName);
 
 							var beforeSha = payload.TryGetProperty("before")?.GetString();
 							var afterSha = payload.TryGetProperty("head")?.GetString();
@@ -451,7 +424,7 @@ namespace GitHubDigestBuilder
 						if (refType == "branch")
 						{
 							var branchName = payload.GetProperty("ref").GetString();
-							var branch = getOrAddBranch(branchName, repoName, sourceRepoName);
+							var branch = getOrAddBranch(branchName, repoName);
 
 							branch.Events.Add(new BranchEventData
 							{
@@ -504,7 +477,7 @@ namespace GitHubDigestBuilder
 
 						var commit = commentedCommits.SingleOrDefault(x => x.Sha == sha);
 						if (commit == null)
-							commentedCommits.Add(commit = new CommentedCommitData { RepoName = repoName, SourceRepoName = sourceRepoName, Sha = sha });
+							commentedCommits.Add(commit = new CommentedCommitData { RepoName = repoName, Sha = sha });
 
 						var conversation = commit.Conversations.SingleOrDefault(x => x.FilePath == filePath && x.Position == position?.ToString());
 						if (conversation == null)
@@ -527,7 +500,7 @@ namespace GitHubDigestBuilder
 						var headRepoName = pullRequest?.TryGetProperty("head", "repo", "full_name")?.GetString();
 						if (headRepoName == null)
 							continue;
-						var branch = getOrAddBranch(branchName, headRepoName, sourceRepoName, number, repoName);
+						var branch = getOrAddBranch(branchName, headRepoName, number, repoName);
 
 						var title = pullRequestOrIssue.TryGetProperty("title")?.GetString();
 						if (title != null)
@@ -630,6 +603,9 @@ namespace GitHubDigestBuilder
 
 				RepoData getOrAddRepo(string n)
 				{
+					if (n == null)
+						throw new InvalidOperationException();
+
 					var repo = repos.LastOrDefault(x => x.Name == n);
 					if (repo == null)
 					{
@@ -641,11 +617,10 @@ namespace GitHubDigestBuilder
 				}
 
 				foreach (var branch in branches
-					.OrderBy(x => x.PullRequest != null ? 1 : x.ForkOwner == null ? 2 : 3)
-					.ThenBy(x => x.PullRequest?.Number ?? 0)
-					.ThenBy(x => x.ForkOwner ?? "", StringComparer.InvariantCulture))
+					.OrderBy(x => x.PullRequest != null ? 1 : 2)
+					.ThenBy(x => x.PullRequest?.Number ?? 0))
 				{
-					getOrAddRepo(branch.SourceRepoName).Branches.Add(branch);
+					getOrAddRepo(branch.RepoName).Branches.Add(branch);
 				}
 
 				foreach (var tagEvent in tagEvents)
@@ -655,7 +630,7 @@ namespace GitHubDigestBuilder
 					getOrAddRepo(wikiEvent.RepoName).WikiEvents.Add(wikiEvent);
 
 				foreach (var commentedCommit in commentedCommits)
-					getOrAddRepo(commentedCommit.SourceRepoName).CommentedCommits.Add(commentedCommit);
+					getOrAddRepo(commentedCommit.RepoName).CommentedCommits.Add(commentedCommit);
 
 				var report = new ReportData
 				{
