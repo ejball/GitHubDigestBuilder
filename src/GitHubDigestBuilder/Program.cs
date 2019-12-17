@@ -355,6 +355,8 @@ namespace GitHubDigestBuilder
 					return branch;
 				}
 
+				var unhandledEventTypes = new HashSet<string>();
+
 				foreach (var rawEvent in rawEvents)
 				{
 					var repoName = rawEvent.RepoName;
@@ -614,7 +616,14 @@ namespace GitHubDigestBuilder
 							}
 						}
 					}
+					else if (eventType != "DeleteEvent" && eventType != "ForkEvent" && eventType != "WatchEvent")
+					{
+						unhandledEventTypes.Add(eventType);
+					}
 				}
+
+				foreach (var eventType in unhandledEventTypes)
+					warnings.Add($"Unexpected event type: {eventType}");
 
 				var repos = new List<RepoData>();
 
