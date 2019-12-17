@@ -10,6 +10,8 @@ namespace GitHubDigestBuilder.Models
 
 		public string RepoName { get; set; }
 
+		public string Url { get; set; }
+
 		public bool IsClosed { get; set; }
 	}
 }

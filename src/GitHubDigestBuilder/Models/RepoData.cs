@@ -6,6 +6,8 @@ namespace GitHubDigestBuilder.Models
 	{
 		public string Name { get; set; }
 
+		public string Url { get; set; }
+
 		public List<BranchData> Branches { get; } = new List<BranchData>();
 
 		public List<TagEventData> TagEvents { get; } = new List<TagEventData>();

@@ -20,27 +20,27 @@ a:hover, a:focus { text-decoration: none }
 <div class="col-sm-9">
 
 {{- func repo_link -}}
-<a href="{{ base_url }}/{{ $0.name | html.escape }}">{{ $0.name | html.escape }}</a>
+<a href="{{ $0.url }}">{{ $0.name | html.escape }}</a>
 {{- end # func ~}}
 
 {{- func branch_link -}}
-<a href="{{ base_url }}/{{ $0.repo_name }}/tree/{{ $0.name | html.escape }}">{{ $0.name | html.escape }}</a>
+<a href="{{ $0.url }}">{{ $0.name | html.escape }}</a>
 {{- end # func ~}}
 
 {{- func pull_request_link -}}
-<a href="{{ base_url }}/{{ $0.repo_name }}/pull/{{ $0.number }}">#{{ $0.number }}</a>
+<a href="{{ $0.url }}">#{{ $0.number }}</a>
 {{- end # func ~}}
 
 {{- func tag_link -}}
-<a href="{{ base_url }}/{{ $0.repo_name }}/tree/{{ $0.name | html.escape }}">{{ $0.name | html.escape }}</a>
+<a href="{{ $0.url }}">{{ $0.name | html.escape }}</a>
 {{- end # func ~}}
 
 {{- func wiki_link -}}
-<a href="{{ base_url }}/{{ $0.repo_name }}/wiki/{{ $0.page_name | html.escape }}">{{ $0.page_title | html.escape }}</a>
+<a href="{{ $0.url }}">{{ $0.page_title | html.escape }}</a>
 {{- end # func ~}}
 
 {{- func user_link -}}
-<a href="{{ base_url }}/{{ $0 | html.escape }}" class="text-body font-weight-bold">{{ $0 | html.escape }}</a>
+<a href="{{ web_base }}/{{ $0 | html.escape }}" class="text-body font-weight-bold">{{ $0 | html.escape }}</a>
 {{- end # func ~}}
 
 {{- func commits_text -}}
@@ -49,9 +49,9 @@ a:hover, a:focus { text-decoration: none }
 
 {{- func commits_link -}}
 {{- if $0.commit_count == 1 -}}
-<a href="{{ base_url }}/{{ $0.repo_name }}/commit/{{ $0.after_sha }}">
+<a href="{{ web_base }}/{{ $0.repo_name }}/commit/{{ $0.after_sha }}">
 {{- else -}}
-<a href="{{ base_url }}/{{ $0.repo_name }}/compare/{{ $0.before_sha }}...{{ $0.after_sha }}">
+<a href="{{ web_base }}/{{ $0.repo_name }}/compare/{{ $0.before_sha }}...{{ $0.after_sha }}">
 {{- end # if -}}
 {{- if $0.commit_count >= 100 -}}
 100+ commits</a>
@@ -63,7 +63,7 @@ a:hover, a:focus { text-decoration: none }
 {{- end # func ~}}
 
 {{- func commit_link -}}
-<a href="{{ base_url }}/{{ $0.repo_name }}/commit/{{ $0.sha }}"><code>{{ commit.sha | string.slice 0 7 }}</code></a>
+<a href="{{ web_base }}/{{ $0.repo_name }}/commit/{{ $0.sha }}"><code>{{ commit.sha | string.slice 0 7 }}</code></a>
 {{- end # func ~}}
 
 <h3>{{ date | format 'D' | html.escape }}</h3>
@@ -107,7 +107,7 @@ a:hover, a:focus { text-decoration: none }
 {{ else if event.kind == 'pull-request-opened' ~}}
 <li class="text-truncate">{{ event.actor_name | user_link }} opened pull request {{ branch.pull_request | pull_request_link }}</li>
 {{ if !branch.pull_request.body.empty? ~}}
-<li class="text-truncate">{{ event.actor_name | user_link }} <a href="{{ base_url }}/{{ branch.pull_request.repo_name }}/pull/{{ branch.pull_request.number }}" class="text-secondary">&#x21D2;</a> {{ branch.pull_request.body | html.escape }}</li>
+<li class="text-truncate">{{ event.actor_name | user_link }} <a href="{{ web_base }}/{{ branch.pull_request.repo_name }}/pull/{{ branch.pull_request.number }}" class="text-secondary">&#x21D2;</a> {{ branch.pull_request.body | html.escape }}</li>
 {{ end # if ~}}
 {{ else if event.kind == 'pull-request-merged' ~}}
 <li class="text-truncate">{{ event.actor_name | user_link }} merged pull request {{ branch.pull_request | pull_request_link }} into {{ event.base_branch | branch_link }}</li>

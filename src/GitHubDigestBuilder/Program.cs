@@ -155,7 +155,7 @@ namespace GitHubDigestBuilder
 					return new PagedDownloadResult(status, items);
 				}
 
-				var baseUrl = (settings.GitHub?.WebUrl ?? "https://github.com").TrimEnd('/');
+				var webBase = (settings.GitHub?.WebUrl ?? "https://github.com").TrimEnd('/');
 
 				var sourceRepoNames = new List<string>();
 				var sourceRepoIndices = new Dictionary<string, int>();
@@ -318,6 +318,7 @@ namespace GitHubDigestBuilder
 				{
 					branch.Name ??= branchName;
 					branch.RepoName ??= repoName;
+					branch.Url ??= $"{webBase}/{repoName}/tree/{branchName}";
 
 					if (pullRequestNumber != null)
 					{
@@ -325,6 +326,7 @@ namespace GitHubDigestBuilder
 						{
 							Number = pullRequestNumber.Value,
 							RepoName = pullRequestRepoName,
+							Url = $"{webBase}/{pullRequestRepoName}/pull/{pullRequestNumber}",
 						};
 					}
 				}
@@ -423,9 +425,11 @@ namespace GitHubDigestBuilder
 					else if (eventType == "CreateEvent")
 					{
 						var refType = payload.GetProperty("ref_type").GetString();
+						var refName = payload.GetProperty("ref").GetString();
+
 						if (refType == "branch")
 						{
-							var branchName = payload.GetProperty("ref").GetString();
+							var branchName = refName;
 							var branch = getOrAddBranch(branchName, repoName);
 
 							branch.Events.Add(new BranchEventData
@@ -442,7 +446,12 @@ namespace GitHubDigestBuilder
 								Kind = "create-tag",
 								RepoName = repoName,
 								ActorName = actorName,
-								Tag = new TagData { Name = payload.GetProperty("ref").GetString(), RepoName = repoName },
+								Tag = new TagData
+								{
+									Name = refName,
+									RepoName = repoName,
+									Url = $"{webBase}/{repoName}/tree/{refName}",
+								},
 							});
 						}
 					}
@@ -461,6 +470,7 @@ namespace GitHubDigestBuilder
 									RepoName = repoName,
 									ActorName = actorName,
 									PageName = pageName,
+									Url = $"{webBase}/{repoName}/wiki/{pageName}",
 								};
 								wikiEvents.Add(wikiEvent);
 							}
@@ -488,7 +498,7 @@ namespace GitHubDigestBuilder
 						conversation.Comments.Add(new CommentData
 						{
 							ActorName = actorName,
-							Url = $"{baseUrl}/{repoName}/commit/{sha}#{(filePath == null ? "commitcomment-" : "r")}{commentId}",
+							Url = $"{webBase}/{repoName}/commit/{sha}#{(filePath == null ? "commitcomment-" : "r")}{commentId}",
 							Body = data.GetProperty("body").GetString(),
 						});
 					}
@@ -540,7 +550,12 @@ namespace GitHubDigestBuilder
 									if (repoName != baseRepoName)
 										throw new InvalidOperationException("Unexpected pull request base.");
 
-									baseBranch = new BranchData { Name = baseBranchName, RepoName = repoName };
+									baseBranch = new BranchData
+									{
+										Name = baseBranchName,
+										RepoName = repoName,
+										Url = $"{webBase}/{repoName}/tree/{baseBranchName}",
+									};
 								}
 							}
 
@@ -583,7 +598,7 @@ namespace GitHubDigestBuilder
 								conversation.Comments.Add(new CommentData
 								{
 									ActorName = actorName,
-									Url = $"{baseUrl}/{repoName}/pull/{number}#{(eventType == "PullRequestReviewCommentEvent" ? "discussion_r" : "issuecomment-")}{commentId}",
+									Url = $"{webBase}/{repoName}/pull/{number}#{(eventType == "PullRequestReviewCommentEvent" ? "discussion_r" : "issuecomment-")}{commentId}",
 									Body = commentBody,
 								});
 							}
@@ -611,7 +626,7 @@ namespace GitHubDigestBuilder
 					var repo = repos.LastOrDefault(x => x.Name == n);
 					if (repo == null)
 					{
-						repo = new RepoData { Name = n };
+						repo = new RepoData { Name = n, Url = $"{webBase}/{n}" };
 						repos.Add(repo);
 					}
 
@@ -638,7 +653,7 @@ namespace GitHubDigestBuilder
 				{
 					Date = date,
 					PreviousDate = date.AddDays(-1),
-					BaseUrl = baseUrl,
+					WebBase = webBase,
 					AutoRefresh = autoRefresh,
 					Now = now,
 				};

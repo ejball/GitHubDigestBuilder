@@ -8,6 +8,8 @@ namespace GitHubDigestBuilder.Models
 
 		public string RepoName { get; set; }
 
+		public string Url { get; set; }
+
 		public List<EventData> Events { get; } = new List<EventData>();
 
 		public PullRequestData PullRequest { get; set; }
