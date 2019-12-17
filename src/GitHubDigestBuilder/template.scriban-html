@@ -69,9 +69,9 @@ a:hover, a:focus { text-decoration: none }
 <h3>{{ date | format 'D' | html.escape }}</h3>
 <p><a href="./{{ previous_date | format 'yyyy-MM-dd' }}.html">« previous</a> | <a href="./">latest »</a></p>
 
-{{ if warnings ~}}
+{{ if !warnings.empty? ~}}
 <ul>
-{{ for warning in warnings }}
+{{ for warning in warnings ~}}
 <li>{{ warning | html.escape }}
 {{ end # for warning ~}}
 </ul>
