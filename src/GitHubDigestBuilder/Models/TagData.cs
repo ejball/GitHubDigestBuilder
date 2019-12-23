@@ -4,8 +4,8 @@ namespace GitHubDigestBuilder.Models
 	{
 		public string Name { get; set; }
 
-		public string RepoName { get; set; }
+		public RepoData Repo { get; set; }
 
-		public string Url { get; set; }
+		public string Url => $"{Repo.Report.WebBase}/{Repo.Name}/tree/{Name}";
 	}
 }

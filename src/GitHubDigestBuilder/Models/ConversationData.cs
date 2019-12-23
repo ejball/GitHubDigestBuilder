@@ -4,6 +4,10 @@ namespace GitHubDigestBuilder.Models
 {
 	internal sealed class ConversationData
 	{
+		public CommentedCommitData Commit { get; set; }
+
+		public PullRequestData PullRequest { get; set; }
+
 		public string FilePath { get; set; }
 
 		public string Position { get; set; }

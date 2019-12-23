@@ -40,7 +40,7 @@ a:hover, a:focus { text-decoration: none }
 {{- end # func ~}}
 
 {{- func user_link -}}
-<a href="{{ web_base }}/{{ $0 | html.escape }}" class="text-body font-weight-bold">{{ $0 | html.escape }}</a>
+<a href="{{ $0.url }}" class="text-body font-weight-bold">{{ $0.name | html.escape }}</a>
 {{- end # func ~}}
 
 {{- func commits_text -}}
@@ -48,11 +48,7 @@ a:hover, a:focus { text-decoration: none }
 {{- end # func ~}}
 
 {{- func commits_link -}}
-{{- if $0.commit_count == 1 -}}
-<a href="{{ web_base }}/{{ $0.repo_name }}/commit/{{ $0.after_sha }}">
-{{- else -}}
-<a href="{{ web_base }}/{{ $0.repo_name }}/compare/{{ $0.before_sha }}...{{ $0.after_sha }}">
-{{- end # if -}}
+<a href="{{ $0.url }}">
 {{- if $0.commit_count >= 100 -}}
 100+ commits</a>
 {{- else if $0.commit_count == $0.new_commit_count -}}
@@ -63,7 +59,7 @@ a:hover, a:focus { text-decoration: none }
 {{- end # func ~}}
 
 {{- func commit_link -}}
-<a href="{{ web_base }}/{{ $0.repo_name }}/commit/{{ $0.sha }}"><code>{{ commit.sha | string.slice 0 7 }}</code></a>
+<a href="{{ $0.url }}"><code>{{ $0.sha | string.slice 0 7 }}</code></a>
 {{- end # func ~}}
 
 <h3>{{ date | format 'D' | html.escape }}</h3>
@@ -82,18 +78,47 @@ a:hover, a:focus { text-decoration: none }
 
 <div class="ml-4">
 
-{{ for branch in repo.branches ~}}
-{{ if branch.pull_request ~}}
-<h5 id="{{ repo.name | string.handleize }}-{{ branch.pull_request.number }}" data-toc-text="PR #{{ branch.pull_request.number }}">{{ branch.pull_request | pull_request_link }} <small class="text-muted">pull request</small></h5>
-<p class="ml-4 mb-1 font-italic">{{ branch.pull_request.title | html.escape }}</p>
+{{ for pull_request in repo.pull_requests ~}}
+<h5 class="text-truncate" id="{{ repo.name | string.handleize }}-{{ pull_request.number }}" data-toc-text="PR #{{ pull_request.number }}"><small class="text-muted">PR</small> {{ pull_request | pull_request_link }} <small class="text-muted">{{ pull_request.title | html.escape }}</small></h5>
+{{ if !pull_request.events.empty? ~}}
+<ul class="list-unstyled ml-4">
+{{ for event in pull_request.events ~}}
+{{ if event.kind == 'opened' ~}}
+<li class="text-truncate">{{ event.actor | user_link }} opened pull request</li>
+{{ if !pull_request.body.empty? ~}}
+<li class="text-truncate">{{ event.actor | user_link }} <a href="{{ web_base }}/{{ pull_request.repo.name }}/pull/{{ pull_request.number }}" class="text-secondary">&#x21D2;</a> {{ pull_request.body | html.escape }}</li>
+{{ end # if ~}}
+{{ else if event.kind == 'merged' ~}}
+<li class="text-truncate">{{ event.actor | user_link }} merged pull request into {{ pull_request.to_branch | branch_link }}</li>
+{{ else if event.kind == 'closed' ~}}
+<li class="text-truncate">{{ event.actor | user_link }} closed pull request</li>
+{{ else if event.kind == 'comment-created' ~}}
+{{ for comment in event.conversation.comments ~}}
+<li class="text-truncate">{{ comment.actor | user_link }} <a href="{{ comment.url }}" class="text-secondary">&#x21D2;</a> {{ comment.body | html.escape }}</li>
+{{ end # for comment ~}}
+{{ else if event.kind == 'review-comment-created' ~}}
+<li class="text-truncate"><a href="{{ event.conversation.comments[0].url }}"><code>{{ event.conversation.file_path | html.escape }}</code></a>
+<ul class="list-unstyled ml-4">
+{{ for comment in event.conversation.comments ~}}
+<li class="text-truncate">{{ comment.actor | user_link }} <a href="{{ comment.url }}" class="text-secondary">&#x21D2;</a> {{ comment.body | html.escape }}</li>
+{{ end # for comment ~}}
+</ul>
+</li>
 {{ else ~}}
-<h5 id="{{ repo.name | string.handleize }}-{{ branch.name | string.handleize }}" data-toc-text="{{ branch.name | html.escape }}">{{ branch | branch_link }} <small class="text-muted">branch</small></h5>
-{{ end # if branch.pull_request ~}}
+<li class="text-truncate">{{ event.actor | user_link }} <code>{{ event.kind }}</code></li>
+{{ end # if event.kind ~}}
+{{ end # for event ~}}
+</ul>
+{{ end # if ~}}
+{{ end # for pull_request ~}}
+
+{{ for branch in repo.branches ~}}
+<h5 class="text-truncate" id="{{ repo.name | string.handleize }}-{{ branch.name | string.handleize }}" data-toc-text="{{ branch.name | html.escape }}">{{ branch | branch_link }} <small class="text-muted">branch</small></h5>
 {{ if !branch.events.empty? ~}}
 <ul class="list-unstyled ml-4">
 {{ for event in branch.events ~}}
 {{ if event.kind == 'push' }}
-<li>{{ event.actor_name | user_link }} pushed {{ event | commits_link }}
+<li>{{ event.actor | user_link }} pushed {{ event | commits_link }}
 {{ if !event.new_commits.empty? && event.commit_count < 100 ~}}
 <ul class="list-unstyled ml-4">
 {{ for commit in event.new_commits ~}}
@@ -102,67 +127,16 @@ a:hover, a:focus { text-decoration: none }
 </ul>
 {{ end #if ~}}
 </li>
-{{ else if event.kind == 'create-branch' ~}}
-<li class="text-truncate">{{ event.actor_name | user_link }} created branch {{ branch | branch_link }}</li>
-{{ else if event.kind == 'pull-request-opened' ~}}
-<li class="text-truncate">{{ event.actor_name | user_link }} opened pull request {{ branch.pull_request | pull_request_link }}</li>
-{{ if !branch.pull_request.body.empty? ~}}
-<li class="text-truncate">{{ event.actor_name | user_link }} <a href="{{ web_base }}/{{ branch.pull_request.repo_name }}/pull/{{ branch.pull_request.number }}" class="text-secondary">&#x21D2;</a> {{ branch.pull_request.body | html.escape }}</li>
-{{ end # if ~}}
-{{ else if event.kind == 'pull-request-merged' ~}}
-<li class="text-truncate">{{ event.actor_name | user_link }} merged pull request {{ branch.pull_request | pull_request_link }} into {{ event.base_branch | branch_link }}</li>
-{{ else if event.kind == 'pull-request-closed' ~}}
-<li class="text-truncate">{{ event.actor_name | user_link }} closed pull request {{ branch.pull_request | pull_request_link }}</li>
-{{ else if event.kind == 'pull-request-comment-created' ~}}
-{{ for comment in event.conversation.comments ~}}
-<li class="text-truncate">{{ comment.actor_name | user_link }} <a href="{{ comment.url }}" class="text-secondary">&#x21D2;</a> {{ comment.body | html.escape }}</li>
-{{ end # for comment ~}}
-{{ else if event.kind == 'pull-request-review-comment-created' ~}}
-<li class="text-truncate"><a href="{{ event.conversation.comments[0].url }}"><code>{{ event.conversation.file_path | html.escape }}</code></a>
-<ul class="list-unstyled ml-4">
-{{ for comment in event.conversation.comments ~}}
-<li class="text-truncate">{{ comment.actor_name | user_link }} <a href="{{ comment.url }}" class="text-secondary">&#x21D2;</a> {{ comment.body | html.escape }}</li>
-{{ end # for comment ~}}
-</ul>
-</li>
 {{ else ~}}
-<li class="text-truncate">{{ event.actor_name | user_link }} <code>{{ event.kind }}</code></li>
+<li class="text-truncate">{{ event.actor | user_link }} <code>{{ event.kind }}</code></li>
 {{ end # if event.kind ~}}
 {{ end # for event ~}}
 </ul>
 {{ end # if ~}}
 {{ end # for branch ~}}
 
-{{ if !repo.tag_events.empty? ~}}
-<h5 id="{{ repo.name | string.handleize }}-tags">tags</h5>
-<ul class="list-unstyled ml-4">
-{{ for event in repo.tag_events ~}}
-{{ if event.kind == 'create-tag' ~}}
-<li class="text-truncate">{{ event.actor_name | user_link }} created tag {{ event.tag | tag_link }}</li>
-{{ else ~}}
-<li class="text-truncate">{{ event.actor_name | user_link }} <code>{{ event.kind }}</code></li>
-{{ end # if event.kind ~}}
-{{ end # for event ~}}
-</ul>
-{{ end # if ~}}
-
-{{ if !repo.wiki_events.empty? ~}}
-<h5 id="{{ repo.name | string.handleize }}-wiki">wiki</h5>
-<ul class="list-unstyled ml-4">
-{{ for event in repo.wiki_events ~}}
-{{ if event.kind == 'created-wiki-page' ~}}
-<li class="text-truncate">{{ event.actor_name | user_link }} created {{ event | wiki_link }}</li>
-{{ else if event.kind == 'edited-wiki-page' ~}}
-<li class="text-truncate">{{ event.actor_name | user_link }} edited {{ event | wiki_link }}</li>
-{{ else ~}}
-<li class="text-truncate">{{ event.actor_name | user_link }} <code>{{ event.kind }}</code></li>
-{{ end # if event.kind ~}}
-{{ end # for event ~}}
-</ul>
-{{ end # if ~}}
-
 {{ if !repo.commented_commits.empty? ~}}
-<h5 id="{{ repo.name | string.handleize }}-comments">commit comments</h5>
+<h5 class="text-truncate" id="{{ repo.name | string.handleize }}-comments">commit comments</h5>
 <ul class="list-unstyled ml-4">
 {{ for commit in repo.commented_commits ~}}
 <li class="text-truncate">{{ commit | commit_link }}
@@ -173,7 +147,7 @@ a:hover, a:focus { text-decoration: none }
 <ul class="list-unstyled ml-4">
 {{ end # if }}
 {{ for comment in conversation.comments ~}}
-<li class="text-truncate">{{ comment.actor_name | user_link }} <a href="{{ comment.url }}" class="text-secondary">&#x21D2;</a> {{ comment.body | html.escape }}</li>
+<li class="text-truncate">{{ comment.actor | user_link }} <a href="{{ comment.url }}" class="text-secondary">&#x21D2;</a> {{ comment.body | html.escape }}</li>
 {{ end # for comment ~}}
 {{ if conversation.file_path ~}}
 </ul>
@@ -183,6 +157,34 @@ a:hover, a:focus { text-decoration: none }
 </ul>
 </li>
 {{ end # for commit ~}}
+</ul>
+{{ end # if ~}}
+
+{{ if !repo.tag_events.empty? ~}}
+<h5 class="text-truncate" id="{{ repo.name | string.handleize }}-tags">tags</h5>
+<ul class="list-unstyled ml-4">
+{{ for event in repo.tag_events ~}}
+{{ if event.kind == 'create-tag' ~}}
+<li class="text-truncate">{{ event.actor | user_link }} created tag {{ event.tag | tag_link }}</li>
+{{ else ~}}
+<li class="text-truncate">{{ event.actor | user_link }} <code>{{ event.kind }}</code></li>
+{{ end # if event.kind ~}}
+{{ end # for event ~}}
+</ul>
+{{ end # if ~}}
+
+{{ if !repo.wiki_events.empty? ~}}
+<h5 class="text-truncate" id="{{ repo.name | string.handleize }}-wiki">wiki pages</h5>
+<ul class="list-unstyled ml-4">
+{{ for event in repo.wiki_events ~}}
+{{ if event.kind == 'created-wiki-page' ~}}
+<li class="text-truncate">{{ event.actor | user_link }} created {{ event | wiki_link }}</li>
+{{ else if event.kind == 'edited-wiki-page' ~}}
+<li class="text-truncate">{{ event.actor | user_link }} edited {{ event | wiki_link }}</li>
+{{ else ~}}
+<li class="text-truncate">{{ event.actor | user_link }} <code>{{ event.kind }}</code></li>
+{{ end # if event.kind ~}}
+{{ end # for event ~}}
 </ul>
 {{ end # if ~}}
 

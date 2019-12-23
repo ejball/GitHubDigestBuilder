@@ -4,8 +4,8 @@ namespace GitHubDigestBuilder.Models
 	{
 		public string Kind { get; set; }
 
-		public string RepoName { get; set; }
+		public RepoData Repo { get; set; }
 
-		public string ActorName { get; set; }
+		public UserData Actor { get; set; }
 	}
 }

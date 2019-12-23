@@ -68,7 +68,6 @@ namespace GitHubDigestBuilder
 					httpClient.DefaultRequestHeaders.Authorization = AuthenticationHeaderValue.Parse($"token {authToken}");
 
 				var apiBase = (settings.GitHub?.ApiUrl ?? "https://api.github.com").TrimEnd('/');
-				var warnings = new List<string>();
 
 				using var sha1 = SHA1.Create();
 				var cacheDirectory = Path.Combine(Path.GetTempPath(), "GitHubDigestBuilder",
@@ -87,8 +86,8 @@ namespace GitHubDigestBuilder
 
 					if (File.Exists(cacheFile))
 					{
-						await using var cacheStream = File.OpenRead(cacheFile);
-						cacheElement = (await JsonDocument.ParseAsync(cacheStream)).RootElement;
+						await using var cacheReadStream = File.OpenRead(cacheFile);
+						cacheElement = (await JsonDocument.ParseAsync(cacheReadStream)).RootElement;
 
 						// if we're asking for the same date, and the date is not today, assume the data is still good
 						var cacheDateIso = cacheElement.GetProperty("date").GetString();
@@ -104,10 +103,10 @@ namespace GitHubDigestBuilder
 							etag = cacheElement.GetProperty("etag").GetString();
 					}
 
-					var foundLastPage = false;
+					var status = DownloadStatus.TooMuchActivity;
 					var items = new List<JsonElement>();
 
-					for (var pageNumber = 1; pageNumber <= maxPageCount && !foundLastPage; pageNumber++)
+					for (var pageNumber = 1; pageNumber <= maxPageCount; pageNumber++)
 					{
 						var pageParameter = pageNumber == 1 ? "" : $"{(url.Contains('?') ? '&' : '?')}page={pageNumber}";
 						var request = new HttpRequestMessage(HttpMethod.Get, $"{apiBase}/{url}{pageParameter}");
@@ -116,12 +115,13 @@ namespace GitHubDigestBuilder
 							request.Headers.IfNoneMatch.Add(EntityTagHeaderValue.Parse(etag));
 
 						var response = await httpClient.SendAsync(request);
+						Console.WriteLine($"{request.RequestUri.AbsoluteUri} [{response.StatusCode}]");
 
 						if (pageNumber == 1 && etag != null && response.StatusCode == HttpStatusCode.NotModified)
 						{
-							return new PagedDownloadResult(
-								Enum.Parse<DownloadStatus>(cacheElement.GetProperty("status").GetString()),
-								cacheElement.GetProperty("items").EnumerateArray().ToList());
+							status = Enum.Parse<DownloadStatus>(cacheElement.GetProperty("status").GetString());
+							items.AddRange(cacheElement.GetProperty("items").EnumerateArray());
+							break;
 						}
 
 						if (response.StatusCode == HttpStatusCode.NotFound)
@@ -136,26 +136,43 @@ namespace GitHubDigestBuilder
 						await using var pageStream = await response.Content.ReadAsStreamAsync();
 						var pageDocument = await JsonDocument.ParseAsync(pageStream);
 
-						foundLastPage = pageDocument.RootElement.GetArrayLength() == 0 || isLastPage?.Invoke(pageDocument.RootElement) == true;
 						items.AddRange(pageDocument.RootElement.EnumerateArray());
+
+						if (pageDocument.RootElement.GetArrayLength() == 0 || isLastPage?.Invoke(pageDocument.RootElement) == true)
+						{
+							status = DownloadStatus.Success;
+							break;
+						}
 					}
 
-					var status = foundLastPage ? DownloadStatus.Success : DownloadStatus.TooMuchActivity;
+					await using var cacheWriteStream = File.Open(cacheFile, FileMode.Create, FileAccess.Write);
+					await JsonSerializer.SerializeAsync(cacheWriteStream, new
 					{
-						await using var cacheStream = File.Open(cacheFile, FileMode.Create, FileAccess.Write);
-						await JsonSerializer.SerializeAsync(cacheStream, new
-						{
-							status = status.ToString(),
-							etag,
-							date = dateIso,
-							items,
-						}, new JsonSerializerOptions { WriteIndented = true });
-					}
+						status = status.ToString(),
+						etag,
+						date = dateIso,
+						items,
+					}, new JsonSerializerOptions { WriteIndented = true });
 
 					return new PagedDownloadResult(status, items);
 				}
 
 				var webBase = (settings.GitHub?.WebUrl ?? "https://github.com").TrimEnd('/');
+
+				var report = new ReportData
+				{
+					Date = date,
+					PreviousDate = date.AddDays(-1),
+					WebBase = webBase,
+					AutoRefresh = autoRefresh,
+					Now = now,
+				};
+
+				void addWarning(string text)
+				{
+					if (!report.Warnings.Contains(text))
+						report.Warnings.Add(text);
+				}
 
 				var sourceRepoNames = new List<string>();
 				var sourceRepoIndices = new Dictionary<string, int>();
@@ -188,9 +205,9 @@ namespace GitHubDigestBuilder
 						addRepoForSource(orgRepoName, sourceIndex);
 
 					if (result.Status == DownloadStatus.TooMuchActivity)
-						warnings.Add($"Too many updated repositories found for {sourceName}.");
+						addWarning($"Too many updated repositories found for {sourceName}.");
 					else if (result.Status == DownloadStatus.NotFound)
-						warnings.Add($"Failed to find repositories for {sourceName}.");
+						addWarning($"Failed to find repositories for {sourceName}.");
 				}
 
 				var settingsRepos = settings.Repos ?? new List<RepoSettings>();
@@ -292,9 +309,9 @@ namespace GitHubDigestBuilder
 					var (rawRepoEvents, repoStatus) = await loadEventsAsync("repos", sourceRepoName);
 					rawEvents.AddRange(rawRepoEvents);
 					if (repoStatus == DownloadStatus.TooMuchActivity)
-						warnings.Add($"{sourceRepoName} repository had too much activity.");
+						addWarning($"{sourceRepoName} repository had too much activity.");
 					else if (repoStatus == DownloadStatus.NotFound)
-						warnings.Add($"{sourceRepoName} repository not found.");
+						addWarning($"{sourceRepoName} repository not found.");
 				}
 
 				foreach (var sourceUserName in sourceUserNames)
@@ -302,13 +319,14 @@ namespace GitHubDigestBuilder
 					var (rawUserEvents, userStatus) = await loadEventsAsync("users", sourceUserName);
 					rawEvents.AddRange(rawUserEvents);
 					if (userStatus == DownloadStatus.TooMuchActivity)
-						warnings.Add($"{sourceUserName} user had too much activity.");
+						addWarning($"{sourceUserName} user had too much activity.");
 					else if (userStatus == DownloadStatus.NotFound)
-						warnings.Add($"{sourceUserName} user not found.");
+						addWarning($"{sourceUserName} user not found.");
 				}
 
 				rawEvents = rawEvents.OrderBy(x => x.CreatedUtc).ToList();
 
+#if false
 				var branches = new List<BranchData>();
 				var tagEvents = new List<TagEventData>();
 				var wikiEvents = new List<WikiEventData>();
@@ -354,15 +372,73 @@ namespace GitHubDigestBuilder
 
 					return branch;
 				}
-
-				var unhandledEventTypes = new HashSet<string>();
+#endif
 
 				foreach (var rawEvent in rawEvents)
 				{
 					var repoName = rawEvent.RepoName;
+
+					var actor = new UserData
+					{
+						Report = report,
+						Name = rawEvent.ActorName,
+					};
+
+					RepoData getOrAddRepo()
+					{
+						var repo = report.Repos.SingleOrDefault(x => x.Name == repoName);
+						if (repo == null)
+						{
+							repo = new RepoData
+							{
+								Report = report,
+								Name = repoName,
+							};
+							report.Repos.Add(repo);
+						}
+
+						return repo;
+					}
+
+					BranchData getOrAddBranch(string name)
+					{
+						if (name == null)
+							throw new InvalidOperationException();
+
+						var repo = getOrAddRepo();
+						var branch = repo.Branches.SingleOrDefault(x => x.Name == name);
+						if (branch == null)
+						{
+							branch = new BranchData
+							{
+								Name = name,
+								Repo = repo,
+							};
+							repo.Branches.Add(branch);
+						}
+
+						return branch;
+					}
+
+					PullRequestData getOrAddPullRequest(int number)
+					{
+						var repo = getOrAddRepo();
+						var pullRequest = repo.PullRequests.SingleOrDefault(x => x.Number == number);
+						if (pullRequest == null)
+						{
+							pullRequest = new PullRequestData
+							{
+								Repo = repo,
+								Number = number,
+							};
+							repo.PullRequests.Add(pullRequest);
+						}
+
+						return pullRequest;
+					}
+
 					var payload = rawEvent.Payload;
 					var eventType = rawEvent.EventType;
-					var actorName = rawEvent.ActorName;
 
 					if (eventType == "PushEvent")
 					{
@@ -371,10 +447,7 @@ namespace GitHubDigestBuilder
 						if (refName?.StartsWith(branchRefPrefix) == true)
 						{
 							var branchName = refName.Substring(branchRefPrefix.Length);
-							var branch = getOrAddBranch(branchName, repoName);
-
-							if (branch.PullRequest != null && branch.PullRequest.IsClosed)
-								branch = addBranch(branchName, repoName);
+							var branch = getOrAddBranch(branchName);
 
 							var beforeSha = payload.TryGetProperty("before")?.GetString();
 							var afterSha = payload.TryGetProperty("head")?.GetString();
@@ -385,8 +458,8 @@ namespace GitHubDigestBuilder
 
 							var push = branch.Events.LastOrDefault() as PushEventData;
 							if (push == null ||
-								push.ActorName != actorName ||
-								push.BranchName != branchName ||
+								push.Actor.Name != actor.Name ||
+								push.Branch.Name != branchName ||
 								push.AfterSha != beforeSha ||
 								!push.CanMerge ||
 								!canMerge)
@@ -394,9 +467,9 @@ namespace GitHubDigestBuilder
 								push = new PushEventData
 								{
 									Kind = "push",
-									RepoName = repoName,
-									ActorName = actorName,
-									BranchName = branchName,
+									Repo = branch.Repo,
+									Actor = actor,
+									Branch = branch,
 									BeforeSha = beforeSha,
 									CanMerge = canMerge,
 								};
@@ -413,15 +486,20 @@ namespace GitHubDigestBuilder
 								var messageMatch = Regex.Match(message, @"^([^\r\n]*)(.*)$", RegexOptions.Singleline);
 								var subject = messageMatch.Groups[1].Value.Trim();
 								var remarks = Regex.Replace(messageMatch.Groups[2].Value.Trim(), @"\s+", " ");
+								var sha = commit.GetProperty("sha").GetString();
 
 								push.NewCommits.Add(new CommitData
 								{
-									RepoName = repoName,
-									Sha = commit.GetProperty("sha").GetString(),
+									Branch = branch,
+									Sha = sha,
 									Subject = subject,
 									Remarks = remarks,
 								});
 							}
+						}
+						else
+						{
+							addWarning($"Ignoring PushEvent to {refName} of {repoName}.");
 						}
 					}
 					else if (eventType == "CreateEvent")
@@ -429,33 +507,33 @@ namespace GitHubDigestBuilder
 						var refType = payload.GetProperty("ref_type").GetString();
 						var refName = payload.GetProperty("ref").GetString();
 
-						if (refType == "branch")
+						if (refType == "tag")
 						{
-							var branchName = refName;
-							var branch = getOrAddBranch(branchName, repoName);
-
-							branch.Events.Add(new BranchEventData
-							{
-								Kind = "create-branch",
-								RepoName = repoName,
-								ActorName = actorName,
-							});
-						}
-						else if (refType == "tag")
-						{
-							tagEvents.Add(new TagEventData
+							var repo = getOrAddRepo();
+							repo.TagEvents.Add(new TagEventData
 							{
 								Kind = "create-tag",
-								RepoName = repoName,
-								ActorName = actorName,
+								Repo = repo,
+								Actor = actor,
 								Tag = new TagData
 								{
 									Name = refName,
-									RepoName = repoName,
-									Url = $"{webBase}/{repoName}/tree/{refName}",
+									Repo = repo,
 								},
 							});
 						}
+						else if (refType == "branch")
+						{
+							// ignore created branches
+						}
+						else
+						{
+							addWarning($"CreateEvent ref type {refType} not supported to {repoName}.");
+						}
+					}
+					else if (eventType == "DeleteEvent")
+					{
+						// ignore deleted branches and tags
 					}
 					else if (eventType == "GollumEvent")
 					{
@@ -463,18 +541,18 @@ namespace GitHubDigestBuilder
 						{
 							var action = page.GetProperty("action").GetString();
 							var pageName = page.GetProperty("page_name").GetString();
-							var wikiEvent = wikiEvents.LastOrDefault();
-							if (wikiEvent == null || wikiEvent.ActorName != actorName || wikiEvent.PageName != pageName)
+							var repo = getOrAddRepo();
+							var wikiEvent = repo.WikiEvents.LastOrDefault();
+							if (wikiEvent == null || wikiEvent.Actor.Name != actor.Name || wikiEvent.PageName != pageName)
 							{
 								wikiEvent = new WikiEventData
 								{
 									Kind = $"{action}-wiki-page",
-									RepoName = repoName,
-									ActorName = actorName,
+									Repo = repo,
+									Actor = actor,
 									PageName = pageName,
-									Url = $"{webBase}/{repoName}/wiki/{pageName}",
 								};
-								wikiEvents.Add(wikiEvent);
+								repo.WikiEvents.Add(wikiEvent);
 							}
 
 							// leave created kind, but use last title
@@ -489,159 +567,181 @@ namespace GitHubDigestBuilder
 						var filePath = data.TryGetProperty("path")?.GetString();
 						var position = data.TryGetProperty("position")?.GetNullOrInt32();
 
-						var commit = commentedCommits.SingleOrDefault(x => x.Sha == sha);
+						var repo = getOrAddRepo();
+						var commit = repo.CommentedCommits.SingleOrDefault(x => x.Sha == sha);
 						if (commit == null)
-							commentedCommits.Add(commit = new CommentedCommitData { RepoName = repoName, Sha = sha });
+							repo.CommentedCommits.Add(commit = new CommentedCommitData { Repo = repo, Sha = sha });
 
 						var conversation = commit.Conversations.SingleOrDefault(x => x.FilePath == filePath && x.Position == position?.ToString());
 						if (conversation == null)
-							commit.Conversations.Add(conversation = new ConversationData { FilePath = filePath, Position = position.ToString() });
+							commit.Conversations.Add(conversation = new ConversationData { Commit = commit, FilePath = filePath, Position = position.ToString() });
 
 						conversation.Comments.Add(new CommentData
 						{
-							ActorName = actorName,
-							Url = $"{webBase}/{repoName}/commit/{sha}#{(filePath == null ? "commitcomment-" : "r")}{commentId}",
+							Conversation = conversation,
+							Actor = actor,
+							CommentId = commentId,
 							Body = data.GetProperty("body").GetString(),
 						});
 					}
-					else if (eventType == "PullRequestEvent" || eventType == "PullRequestReviewCommentEvent" || eventType == "IssueCommentEvent")
+					else if (eventType == "PullRequestEvent" || eventType == "PullRequestReviewCommentEvent")
 					{
-						var pullRequest = payload.TryGetProperty("pull_request");
-						var issue = payload.TryGetProperty("issue");
-						var pullRequestOrIssue = pullRequest ?? issue ?? throw new InvalidOperationException("Missing pull request or issue.");
-						var number = pullRequestOrIssue.GetProperty("number").GetInt32();
-						var branchName = pullRequest?.GetProperty("head", "ref").GetString();
-						var headRepoName = pullRequest?.TryGetProperty("head", "repo", "full_name")?.GetString();
-						if (headRepoName == null)
-							continue;
-						var branch = getOrAddBranch(branchName, headRepoName, number, repoName);
+						var action = payload.GetProperty("action").GetString();
+						var pullRequestElement = payload.GetProperty("pull_request");
+						var number = pullRequestElement.GetProperty("number").GetInt32();
+						var pullRequest = getOrAddPullRequest(number);
 
-						var title = pullRequestOrIssue.TryGetProperty("title")?.GetString();
-						if (title != null)
-							branch.PullRequest.Title = title;
-
-						var body = pullRequestOrIssue.TryGetProperty("body")?.GetString();
-						if (title != null)
-							branch.PullRequest.Body = body;
-
-						var eventKindPrefix = eventType switch
+						pullRequest.FromBranch = new BranchData
 						{
-							"PullRequestEvent" => "pull-request-",
-							"PullRequestReviewCommentEvent" => "pull-request-review-comment-",
-							"IssueCommentEvent" => "pull-request-comment-",
-							_ => throw new InvalidOperationException(),
-						};
-						var eventKind = eventKindPrefix + payload.GetProperty("action").GetString();
-
-						if (eventKind == "pull-request-opened" || eventKind == "pull-request-closed" ||
-							eventKind == "pull-request-comment-created" || eventKind == "pull-request-review-comment-created")
-						{
-							BranchData baseBranch = null;
-
-							if (eventKind == "pull-request-closed")
+							Name = pullRequestElement.GetProperty("head", "ref").GetString(),
+							Repo = new RepoData
 							{
-								branch.PullRequest.IsClosed = true;
+								Name = pullRequestElement.GetProperty("head", "repo", "full_name").GetString(),
+								Report = report,
+							},
+						};
 
-								if (pullRequest.Value.GetProperty("merged").GetBoolean())
-								{
-									eventKind = "pull-request-merged";
+						pullRequest.ToBranch = new BranchData
+						{
+							Name = pullRequestElement.GetProperty("base", "ref").GetString(),
+							Repo = new RepoData
+							{
+								Name = pullRequestElement.GetProperty("base", "repo", "full_name").GetString(),
+								Report = report,
+							},
+						};
 
-									var baseBranchName = pullRequest.Value.GetProperty("base", "ref").GetString();
+						var title = pullRequestElement.GetProperty("title").GetString();
+						if (title != null)
+							pullRequest.Title = title;
 
-									var baseRepoName = pullRequest.Value.GetProperty("base", "repo", "full_name").GetString();
-									if (repoName != baseRepoName)
-										throw new InvalidOperationException("Unexpected pull request base.");
+						var body = pullRequestElement.GetProperty("body").GetString();
+						if (body != null)
+							pullRequest.Body = body;
 
-									baseBranch = new BranchData
-									{
-										Name = baseBranchName,
-										RepoName = repoName,
-										Url = $"{webBase}/{repoName}/tree/{baseBranchName}",
-									};
-								}
+						PullRequestEventData addEvent(string kind)
+						{
+							var eventData = new PullRequestEventData
+							{
+								Kind = kind,
+								Repo = pullRequest.Repo,
+								Actor = actor,
+							};
+							pullRequest.Events.Add(eventData);
+							return eventData;
+						}
+
+						if (eventType == "PullRequestEvent" && action == "opened")
+						{
+							addEvent("opened");
+						}
+						else if (eventType == "PullRequestEvent" && action == "closed")
+						{
+							addEvent(pullRequestElement.GetProperty("merged").GetBoolean() ? "merged" : "closed");
+						}
+						else if (eventType == "PullRequestReviewCommentEvent" && action == "created")
+						{
+							var commentElement = payload.GetProperty("comment");
+							var commentId = commentElement.GetProperty("id").GetInt32();
+							var commentBody = commentElement.GetProperty("body").GetString();
+
+							var filePath = commentElement.GetProperty("path").GetString();
+							var positionBefore = commentElement.GetProperty("original_position").GetNullOrInt32();
+							var positionAfter = commentElement.GetProperty("position").GetNullOrInt32();
+							var position = positionBefore != null ? $"{positionBefore}" : $":{positionAfter}";
+
+							var conversation = pullRequest.Events.OfType<PullRequestEventData>().Select(x => x.Conversation).Where(x => x != null)
+								.SingleOrDefault(x => x.FilePath == filePath && x.Position == position);
+							if (conversation == null)
+							{
+								conversation = new ConversationData { PullRequest = pullRequest, FilePath = filePath, Position = position };
+								addEvent("review-comment-created").Conversation = conversation;
 							}
 
-							if (eventKind == "pull-request-comment-created" || eventKind == "pull-request-review-comment-created")
+							conversation.Comments.Add(new CommentData
+							{
+								Conversation = conversation,
+								Actor = actor,
+								CommentId = commentId,
+								Body = commentBody,
+							});
+						}
+						else
+						{
+							addWarning($"{eventType} action {action} not supported to {repoName}.");
+						}
+					}
+					else if (eventType == "IssueCommentEvent")
+					{
+						var action = payload.GetProperty("action").GetString();
+						var issueElement = payload.GetProperty("issue");
+						var number = issueElement.GetProperty("number").GetInt32();
+
+						if (issueElement.TryGetProperty("pull_request") != null)
+						{
+							var pullRequest = getOrAddPullRequest(number);
+
+							PullRequestEventData addEvent(string kind)
+							{
+								var eventData = new PullRequestEventData
+								{
+									Kind = kind,
+									Repo = pullRequest.Repo,
+									Actor = actor,
+								};
+								pullRequest.Events.Add(eventData);
+								return eventData;
+							}
+
+							if (action == "created")
 							{
 								var commentElement = payload.GetProperty("comment");
 								var commentId = commentElement.GetProperty("id").GetInt32();
 								var commentBody = commentElement.GetProperty("body").GetString();
 
-								ConversationData conversation = null;
-								string filePath = null;
-								string position = null;
-
-								if (eventType == "PullRequestReviewCommentEvent")
+								var conversation = new ConversationData
 								{
-									filePath = commentElement.GetProperty("path").GetString();
-									var positionBefore = commentElement.GetProperty("original_position").GetNullOrInt32();
-									var positionAfter = commentElement.GetProperty("position").GetNullOrInt32();
-									position = positionBefore != null ? $"{positionBefore}" : $":{positionAfter}";
-
-									conversation = branch.Events.OfType<BranchEventData>().Select(x => x.Conversation).Where(x => x != null)
-										.SingleOrDefault(x => x.FilePath == filePath && x.Position == position);
-								}
-
-								if (conversation == null)
-								{
-									conversation = new ConversationData { FilePath = filePath, Position = position };
-
-									var branchEvent = new BranchEventData
-									{
-										Kind = eventKind,
-										RepoName = branch.RepoName,
-										ActorName = actorName,
-										BaseBranch = baseBranch,
-										Conversation = conversation,
-									};
-									branch.Events.Add(branchEvent);
-								}
+									PullRequest = pullRequest,
+								};
+								addEvent("comment-created").Conversation = conversation;
 
 								conversation.Comments.Add(new CommentData
 								{
-									ActorName = actorName,
-									Url = $"{webBase}/{repoName}/pull/{number}#{(eventType == "PullRequestReviewCommentEvent" ? "discussion_r" : "issuecomment-")}{commentId}",
+									Conversation = conversation,
+									Actor = actor,
+									CommentId = commentId,
 									Body = commentBody,
 								});
 							}
 							else
 							{
-								branch.Events.Add(new BranchEventData
-								{
-									Kind = eventKind,
-									RepoName = branch.RepoName,
-									ActorName = actorName,
-									BaseBranch = baseBranch,
-								});
+								addWarning($"{eventType} action {action} not supported to {repoName}.");
 							}
 						}
+						else
+						{
+							addWarning($"Ignored issue comment for {repoName}.");
+						}
 					}
-					else if (eventType != "DeleteEvent" && eventType != "ForkEvent" && eventType != "WatchEvent")
+					else if (eventType == "WatchEvent")
 					{
-						unhandledEventTypes.Add(eventType);
+						// ignore watch events
+					}
+					else if (eventType == "MemberEvent")
+					{
+						// ignore membership events
+					}
+					else if (eventType == "ForkEvent")
+					{
+						// ignore fork events
+					}
+					else
+					{
+						addWarning($"Unexpected {eventType} for {repoName}.");
 					}
 				}
 
-				foreach (var eventType in unhandledEventTypes)
-					warnings.Add($"Unexpected event type: {eventType}");
-
-				var repos = new List<RepoData>();
-
-				RepoData getOrAddRepo(string n)
-				{
-					if (n == null)
-						throw new InvalidOperationException();
-
-					var repo = repos.LastOrDefault(x => x.Name == n);
-					if (repo == null)
-					{
-						repo = new RepoData { Name = n, Url = $"{webBase}/{n}" };
-						repos.Add(repo);
-					}
-
-					return repo;
-				}
-
+#if false
 				foreach (var branch in branches
 					.OrderBy(x => x.PullRequest != null ? 1 : 2)
 					.ThenBy(x => x.PullRequest?.Number ?? 0))
@@ -657,20 +757,18 @@ namespace GitHubDigestBuilder
 
 				foreach (var commentedCommit in commentedCommits)
 					getOrAddRepo(commentedCommit.RepoName).CommentedCommits.Add(commentedCommit);
+#endif
 
-				var report = new ReportData
+				void replaceList<T>(List<T> list, IEnumerable<T> items)
 				{
-					Date = date,
-					PreviousDate = date.AddDays(-1),
-					WebBase = webBase,
-					AutoRefresh = autoRefresh,
-					Now = now,
-				};
+					var newList = items.ToList();
+					list.Clear();
+					list.AddRange(newList);
+				}
 
-				report.Repos.AddRange(repos
+				replaceList(report.Repos, report.Repos
 					.OrderBy(x => sourceRepoIndices.TryGetValue(x.Name, out var i) ? i : int.MaxValue)
 					.ThenBy(x => x.Name, StringComparer.InvariantCulture));
-				report.Warnings.AddRange(warnings);
 
 				var culture = settings.Culture == null ? CultureInfo.CurrentCulture : CultureInfo.GetCultureInfo(settings.Culture);
 
