@@ -307,6 +307,43 @@ namespace GitHubDigestBuilder
 					return (events, result.Status);
 				}
 
+				async Task<(IReadOnlyList<RawEventData> Events, DownloadStatus Status)> loadIssueEventsAsync(string repoName)
+				{
+					var events = new List<RawEventData>();
+					var result = await loadPagesAsync($"repos/{repoName}/issues/events?per_page=100",
+						accepts: new[] { "application/vnd.github.v3+json" }, maxPageCount: 10,
+						isLastPage: page => page.EnumerateArray().Any(x => ParseDateTime(x.GetProperty("created_at").GetString()) < startDateTimeUtc));
+
+					foreach (var eventElement in result.Elements)
+					{
+						var createdUtc = ParseDateTime(eventElement.GetProperty("created_at").GetString());
+						if (createdUtc >= startDateTimeUtc && createdUtc < endDateTimeUtc)
+						{
+							var eventId = "i" + eventElement.GetProperty("id").GetInt64();
+							var actorName = eventElement.GetProperty("actor", "login").GetString();
+
+							if (!handledEventIds.Add(eventId))
+								continue;
+
+							if (usersToExclude.Contains(actorName))
+								continue;
+
+							events.Add(new RawEventData
+							{
+								EventId = eventId,
+								EventType = "IssuesEvent",
+								ActorName = actorName,
+								CreatedUtc = createdUtc,
+								RepoName = repoName,
+								Payload = eventElement,
+							});
+						}
+					}
+
+					events.Reverse();
+					return (events, result.Status);
+				}
+
 				var rawEvents = new List<RawEventData>();
 
 				foreach (var sourceRepoName in sourceRepoNames)
@@ -316,6 +353,13 @@ namespace GitHubDigestBuilder
 					if (repoStatus == DownloadStatus.TooMuchActivity)
 						addWarning($"{sourceRepoName} repository had too much activity.");
 					else if (repoStatus == DownloadStatus.NotFound)
+						addWarning($"{sourceRepoName} repository not found.");
+
+					var (rawRepoIssueEvents, repoIssueStatus) = await loadIssueEventsAsync(sourceRepoName);
+					rawEvents.AddRange(rawRepoIssueEvents);
+					if (repoIssueStatus == DownloadStatus.TooMuchActivity)
+						addWarning($"{sourceRepoName} repository had too much issue activity.");
+					else if (repoIssueStatus == DownloadStatus.NotFound)
 						addWarning($"{sourceRepoName} repository not found.");
 				}
 
@@ -617,11 +661,7 @@ namespace GitHubDigestBuilder
 						if (body != null)
 							pullRequest.Body = body;
 
-						if (eventType == "PullRequestEvent" && action == "opened")
-						{
-							addPullRequestEvent(pullRequest, "opened");
-						}
-						else if (eventType == "PullRequestEvent" && action == "closed")
+						if (eventType == "PullRequestEvent" && action == "closed")
 						{
 							addPullRequestEvent(pullRequest, pullRequestElement.GetProperty("merged").GetBoolean() ? "merged" : "closed");
 						}
@@ -654,12 +694,12 @@ namespace GitHubDigestBuilder
 						}
 						else
 						{
-							addWarning($"{eventType} action {action} not supported to {repoName}.");
+							addPullRequestEvent(pullRequest, action);
 						}
 					}
 					else if (eventType == "IssuesEvent")
 					{
-						var action = payload.GetProperty("action").GetString();
+						var action = payload.TryGetProperty("action")?.GetString() ?? payload.GetProperty("event").GetString();
 						var issueElement = payload.GetProperty("issue");
 						var number = issueElement.GetProperty("number").GetInt32();
 						var issue = getOrAddIssue(number);
@@ -672,18 +712,7 @@ namespace GitHubDigestBuilder
 						if (body != null)
 							issue.Body = body;
 
-						if (action == "opened")
-						{
-							addIssueEvent(issue, "opened");
-						}
-						else if (action == "closed")
-						{
-							addIssueEvent(issue, "closed");
-						}
-						else
-						{
-							addWarning($"{eventType} action {action} not supported to {repoName}.");
-						}
+						addIssueEvent(issue, action);
 					}
 					else if (eventType == "IssueCommentEvent")
 					{
