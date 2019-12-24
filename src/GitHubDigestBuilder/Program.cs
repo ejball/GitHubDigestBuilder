@@ -68,10 +68,11 @@ namespace GitHubDigestBuilder
 					httpClient.DefaultRequestHeaders.Authorization = AuthenticationHeaderValue.Parse($"token {authToken}");
 
 				var apiBase = (settings.GitHub?.ApiUrl ?? "https://api.github.com").TrimEnd('/');
+				const int cacheVersion = 1;
 
 				using var sha1 = SHA1.Create();
 				var cacheDirectory = Path.Combine(Path.GetTempPath(), "GitHubDigestBuilder",
-					BitConverter.ToString(sha1.ComputeHash(Encoding.UTF8.GetBytes($"{apiBase} {authToken}"))).Replace("-", "")[..16]);
+					BitConverter.ToString(sha1.ComputeHash(Encoding.UTF8.GetBytes($"{cacheVersion} {apiBase} {authToken}"))).Replace("-", "")[..16]);
 				Directory.CreateDirectory(cacheDirectory);
 
 				// don't process the same event twice
