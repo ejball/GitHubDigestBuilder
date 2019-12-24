@@ -68,7 +68,7 @@ namespace GitHubDigestBuilder
 					httpClient.DefaultRequestHeaders.Authorization = AuthenticationHeaderValue.Parse($"token {authToken}");
 
 				var apiBase = (settings.GitHub?.ApiUrl ?? "https://api.github.com").TrimEnd('/');
-				const int cacheVersion = 1;
+				const int cacheVersion = 2;
 
 				using var sha1 = SHA1.Create();
 				var cacheDirectory = Path.Combine(Path.GetTempPath(), "GitHubDigestBuilder",
@@ -78,7 +78,7 @@ namespace GitHubDigestBuilder
 				// don't process the same event twice
 				var handledEventIds = new HashSet<string>();
 
-				async Task<PagedDownloadResult> loadPagesAsync(string url, int maxPageCount, Func<JsonElement, bool> isLastPage = null)
+				async Task<PagedDownloadResult> loadPagesAsync(string url, string[] accepts, int maxPageCount, Func<JsonElement, bool> isLastPage = null)
 				{
 					var cacheName = Regex.Replace(Regex.Replace(url, @"\?.*$", ""), @"/+", "_").Trim('_');
 					var cacheFile = Path.Combine(cacheDirectory, $"{cacheName}.json");
@@ -111,7 +111,8 @@ namespace GitHubDigestBuilder
 					{
 						var pageParameter = pageNumber == 1 ? "" : $"{(url.Contains('?') ? '&' : '?')}page={pageNumber}";
 						var request = new HttpRequestMessage(HttpMethod.Get, $"{apiBase}/{url}{pageParameter}");
-						request.Headers.Accept.Add(MediaTypeWithQualityHeaderValue.Parse("application/vnd.github.v3+json"));
+						foreach (var accept in accepts)
+							request.Headers.Accept.Add(MediaTypeWithQualityHeaderValue.Parse(accept));
 						if (pageNumber == 1 && etag != null)
 							request.Headers.IfNoneMatch.Add(EntityTagHeaderValue.Parse(etag));
 
@@ -187,16 +188,18 @@ namespace GitHubDigestBuilder
 					}
 				}
 
-				async Task addReposForSource(string sourceKind, string sourceName, int sourceIndex)
+				async Task addReposForSource(string sourceKind, string sourceName, int sourceIndex, string topic)
 				{
 					var orgRepoNames = new HashSet<string>();
-					var result = await loadPagesAsync($"{sourceKind}/{sourceName}/repos?sort=updated&per_page=100", maxPageCount: 100);
+					var result = await loadPagesAsync($"{sourceKind}/{sourceName}/repos?sort=updated&per_page=100",
+						accepts: new[] { "application/vnd.github.mercy-preview+json" }, maxPageCount: 100);
 
 					foreach (var repoElement in result.Elements)
 					{
 						if (!repoElement.GetProperty("private").GetBoolean() &&
 							!repoElement.GetProperty("archived").GetBoolean() &&
-							!repoElement.GetProperty("disabled").GetBoolean())
+							!repoElement.GetProperty("disabled").GetBoolean() &&
+							(topic == null || repoElement.GetProperty("topics").EnumerateArray().Select(x => x.GetString()).Any(x => x == topic)))
 						{
 							orgRepoNames.Add(repoElement.GetProperty("full_name").GetString());
 						}
@@ -216,16 +219,16 @@ namespace GitHubDigestBuilder
 				{
 					switch (settingsRepo)
 					{
-					case { Name: string name, User: null, Org: null }:
+					case { Name: string name, User: null, Org: null, Topic: null }:
 						addRepoForSource(name, sourceIndex);
 						break;
 
 					case { Name: null, User: string user, Org: null }:
-						await addReposForSource("users", user, sourceIndex);
+						await addReposForSource("users", user, sourceIndex, topic: settingsRepo.Topic);
 						break;
 
 					case { Name: null, User: null, Org: string org }:
-						await addReposForSource("orgs", org, sourceIndex);
+						await addReposForSource("orgs", org, sourceIndex, topic: settingsRepo.Topic);
 						break;
 
 					default:
@@ -267,7 +270,8 @@ namespace GitHubDigestBuilder
 				async Task<(IReadOnlyList<RawEventData> Events, DownloadStatus Status)> loadEventsAsync(string sourceKind, string sourceName)
 				{
 					var events = new List<RawEventData>();
-					var result = await loadPagesAsync($"{sourceKind}/{sourceName}/events", maxPageCount: 10,
+					var result = await loadPagesAsync($"{sourceKind}/{sourceName}/events",
+						accepts: new[] { "application/vnd.github.v3+json" }, maxPageCount: 10,
 						isLastPage: page => page.EnumerateArray().Any(x => ParseDateTime(x.GetProperty("created_at").GetString()) < startDateTimeUtc));
 
 					foreach (var eventElement in result.Elements)
