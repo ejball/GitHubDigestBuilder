@@ -8,6 +8,8 @@ namespace GitHubDigestBuilder.Models
 
 		public PullRequestData PullRequest { get; set; }
 
+		public IssueData Issue { get; set; }
+
 		public string FilePath { get; set; }
 
 		public string Position { get; set; }

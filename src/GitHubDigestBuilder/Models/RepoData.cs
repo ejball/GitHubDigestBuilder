@@ -18,6 +18,8 @@ namespace GitHubDigestBuilder.Models
 
 		public List<WikiEventData> WikiEvents { get; } = new List<WikiEventData>();
 
+		public List<IssueData> Issues { get; } = new List<IssueData>();
+
 		public string Url => $"{Report.WebBase}/{Name}";
 	}
 }

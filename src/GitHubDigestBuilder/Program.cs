@@ -326,54 +326,6 @@ namespace GitHubDigestBuilder
 
 				rawEvents = rawEvents.OrderBy(x => x.CreatedUtc).ToList();
 
-#if false
-				var branches = new List<BranchData>();
-				var tagEvents = new List<TagEventData>();
-				var wikiEvents = new List<WikiEventData>();
-				var commentedCommits = new List<CommentedCommitData>();
-
-				void updateBranch(BranchData branch, string branchName, string repoName, int? pullRequestNumber = null, string pullRequestRepoName = null)
-				{
-					branch.Name ??= branchName;
-					branch.RepoName ??= repoName;
-					branch.Url ??= $"{webBase}/{repoName}/tree/{branchName}";
-
-					if (pullRequestNumber != null)
-					{
-						branch.PullRequest ??= new PullRequestData
-						{
-							Number = pullRequestNumber.Value,
-							RepoName = pullRequestRepoName,
-							Url = $"{webBase}/{pullRequestRepoName}/pull/{pullRequestNumber}",
-						};
-					}
-				}
-
-				BranchData addBranch(string branchName, string repoName, int? pullRequestNumber = null, string pullRequestRepoName = null)
-				{
-					var branch = new BranchData();
-					updateBranch(branch, branchName, repoName, pullRequestNumber, pullRequestRepoName);
-					branches.Add(branch);
-					return branch;
-				}
-
-				BranchData getOrAddBranch(string branchName, string repoName, int? pullRequestNumber = null, string pullRequestRepoName = null)
-				{
-					var branch = branches.LastOrDefault(x => (repoName != null && branchName != null && x.RepoName == repoName && x.Name == branchName) ||
-						(pullRequestNumber != null && pullRequestRepoName != null && x.PullRequest?.Number == pullRequestNumber && x.PullRequest?.RepoName == pullRequestRepoName));
-
-					if (pullRequestNumber != null && branch?.PullRequest != null && branch.PullRequest.Number != pullRequestNumber)
-						branch = null;
-
-					if (branch == null)
-						branch = addBranch(branchName, repoName, pullRequestNumber, pullRequestRepoName);
-
-					updateBranch(branch, branchName, repoName, pullRequestNumber, pullRequestRepoName);
-
-					return branch;
-				}
-#endif
-
 				foreach (var rawEvent in rawEvents)
 				{
 					var repoName = rawEvent.RepoName;
@@ -435,6 +387,47 @@ namespace GitHubDigestBuilder
 						}
 
 						return pullRequest;
+					}
+
+					IssueData getOrAddIssue(int number)
+					{
+						var repo = getOrAddRepo();
+						var issue = repo.Issues.SingleOrDefault(x => x.Number == number);
+						if (issue == null)
+						{
+							issue = new IssueData
+							{
+								Repo = repo,
+								Number = number,
+							};
+							repo.Issues.Add(issue);
+						}
+
+						return issue;
+					}
+
+					PullRequestEventData addPullRequestEvent(PullRequestData pullRequest, string kind)
+					{
+						var eventData = new PullRequestEventData
+						{
+							Kind = kind,
+							Repo = pullRequest.Repo,
+							Actor = actor,
+						};
+						pullRequest.Events.Add(eventData);
+						return eventData;
+					}
+
+					IssueEventData addIssueEvent(IssueData issue, string kind)
+					{
+						var eventData = new IssueEventData
+						{
+							Kind = kind,
+							Repo = issue.Repo,
+							Actor = actor,
+						};
+						issue.Events.Add(eventData);
+						return eventData;
 					}
 
 					var payload = rawEvent.Payload;
@@ -619,25 +612,13 @@ namespace GitHubDigestBuilder
 						if (body != null)
 							pullRequest.Body = body;
 
-						PullRequestEventData addEvent(string kind)
-						{
-							var eventData = new PullRequestEventData
-							{
-								Kind = kind,
-								Repo = pullRequest.Repo,
-								Actor = actor,
-							};
-							pullRequest.Events.Add(eventData);
-							return eventData;
-						}
-
 						if (eventType == "PullRequestEvent" && action == "opened")
 						{
-							addEvent("opened");
+							addPullRequestEvent(pullRequest, "opened");
 						}
 						else if (eventType == "PullRequestEvent" && action == "closed")
 						{
-							addEvent(pullRequestElement.GetProperty("merged").GetBoolean() ? "merged" : "closed");
+							addPullRequestEvent(pullRequest, pullRequestElement.GetProperty("merged").GetBoolean() ? "merged" : "closed");
 						}
 						else if (eventType == "PullRequestReviewCommentEvent" && action == "created")
 						{
@@ -655,7 +636,7 @@ namespace GitHubDigestBuilder
 							if (conversation == null)
 							{
 								conversation = new ConversationData { PullRequest = pullRequest, FilePath = filePath, Position = position };
-								addEvent("review-comment-created").Conversation = conversation;
+								addPullRequestEvent(pullRequest, "review-comment-created").Conversation = conversation;
 							}
 
 							conversation.Comments.Add(new CommentData
@@ -665,6 +646,34 @@ namespace GitHubDigestBuilder
 								CommentId = commentId,
 								Body = commentBody,
 							});
+						}
+						else
+						{
+							addWarning($"{eventType} action {action} not supported to {repoName}.");
+						}
+					}
+					else if (eventType == "IssuesEvent")
+					{
+						var action = payload.GetProperty("action").GetString();
+						var issueElement = payload.GetProperty("issue");
+						var number = issueElement.GetProperty("number").GetInt32();
+						var issue = getOrAddIssue(number);
+
+						var title = issueElement.GetProperty("title").GetString();
+						if (title != null)
+							issue.Title = title;
+
+						var body = issueElement.GetProperty("body").GetString();
+						if (body != null)
+							issue.Body = body;
+
+						if (action == "opened")
+						{
+							addIssueEvent(issue, "opened");
+						}
+						else if (action == "closed")
+						{
+							addIssueEvent(issue, "closed");
 						}
 						else
 						{
@@ -681,18 +690,6 @@ namespace GitHubDigestBuilder
 						{
 							var pullRequest = getOrAddPullRequest(number);
 
-							PullRequestEventData addEvent(string kind)
-							{
-								var eventData = new PullRequestEventData
-								{
-									Kind = kind,
-									Repo = pullRequest.Repo,
-									Actor = actor,
-								};
-								pullRequest.Events.Add(eventData);
-								return eventData;
-							}
-
 							if (action == "created")
 							{
 								var commentElement = payload.GetProperty("comment");
@@ -703,7 +700,7 @@ namespace GitHubDigestBuilder
 								{
 									PullRequest = pullRequest,
 								};
-								addEvent("comment-created").Conversation = conversation;
+								addPullRequestEvent(pullRequest, "comment-created").Conversation = conversation;
 
 								conversation.Comments.Add(new CommentData
 								{
@@ -720,7 +717,32 @@ namespace GitHubDigestBuilder
 						}
 						else
 						{
-							addWarning($"Ignored issue comment for {repoName}.");
+							var issue = getOrAddIssue(number);
+
+							if (action == "created")
+							{
+								var commentElement = payload.GetProperty("comment");
+								var commentId = commentElement.GetProperty("id").GetInt32();
+								var commentBody = commentElement.GetProperty("body").GetString();
+
+								var conversation = new ConversationData
+								{
+									Issue = issue,
+								};
+								addIssueEvent(issue, "comment-created").Conversation = conversation;
+
+								conversation.Comments.Add(new CommentData
+								{
+									Conversation = conversation,
+									Actor = actor,
+									CommentId = commentId,
+									Body = commentBody,
+								});
+							}
+							else
+							{
+								addWarning($"{eventType} action {action} not supported to {repoName}.");
+							}
 						}
 					}
 					else if (eventType == "WatchEvent")
@@ -741,24 +763,6 @@ namespace GitHubDigestBuilder
 					}
 				}
 
-#if false
-				foreach (var branch in branches
-					.OrderBy(x => x.PullRequest != null ? 1 : 2)
-					.ThenBy(x => x.PullRequest?.Number ?? 0))
-				{
-					getOrAddRepo(branch.RepoName).Branches.Add(branch);
-				}
-
-				foreach (var tagEvent in tagEvents)
-					getOrAddRepo(tagEvent.RepoName).TagEvents.Add(tagEvent);
-
-				foreach (var wikiEvent in wikiEvents)
-					getOrAddRepo(wikiEvent.RepoName).WikiEvents.Add(wikiEvent);
-
-				foreach (var commentedCommit in commentedCommits)
-					getOrAddRepo(commentedCommit.RepoName).CommentedCommits.Add(commentedCommit);
-#endif
-
 				void replaceList<T>(List<T> list, IEnumerable<T> items)
 				{
 					var newList = items.ToList();
@@ -769,6 +773,12 @@ namespace GitHubDigestBuilder
 				replaceList(report.Repos, report.Repos
 					.OrderBy(x => sourceRepoIndices.TryGetValue(x.Name, out var i) ? i : int.MaxValue)
 					.ThenBy(x => x.Name, StringComparer.InvariantCulture));
+
+				foreach (var repo in report.Repos)
+				{
+					replaceList(repo.PullRequests, repo.PullRequests.OrderBy(x => x.Number));
+					replaceList(repo.Issues, repo.Issues.OrderBy(x => x.Number));
+				}
 
 				var culture = settings.Culture == null ? CultureInfo.CurrentCulture : CultureInfo.GetCultureInfo(settings.Culture);
 

@@ -31,6 +31,10 @@ a:hover, a:focus { text-decoration: none }
 <a href="{{ $0.url }}">#{{ $0.number }}</a>
 {{- end # func ~}}
 
+{{- func issue_link -}}
+<a href="{{ $0.url }}">#{{ $0.number }}</a>
+{{- end # func ~}}
+
 {{- func tag_link -}}
 <a href="{{ $0.url }}">{{ $0.name | html.escape }}</a>
 {{- end # func ~}}
@@ -187,6 +191,30 @@ a:hover, a:focus { text-decoration: none }
 {{ end # for event ~}}
 </ul>
 {{ end # if ~}}
+
+{{ for issue in repo.issues ~}}
+<h5 class="text-truncate" id="{{ repo.name | string.handleize }}-{{ issue.number }}" data-toc-text="issue #{{ issue.number }}"><small class="text-muted">issue</small> {{ issue | issue_link }} <small class="text-muted">{{ issue.title | html.escape }}</small></h5>
+{{ if !issue.events.empty? ~}}
+<ul class="list-unstyled ml-4">
+{{ for event in issue.events ~}}
+{{ if event.kind == 'opened' ~}}
+<li class="text-truncate">{{ event.actor | user_link }} opened issue</li>
+{{ if !issue.body.empty? ~}}
+<li class="text-truncate">{{ event.actor | user_link }} <a href="{{ web_base }}/{{ issue.repo.name }}/pull/{{ issue.number }}" class="text-secondary">&#x21D2;</a> {{ issue.body | html.escape }}</li>
+{{ end # if ~}}
+{{ else if event.kind == 'closed' ~}}
+<li class="text-truncate">{{ event.actor | user_link }} closed issue</li>
+{{ else if event.kind == 'comment-created' ~}}
+{{ for comment in event.conversation.comments ~}}
+<li class="text-truncate">{{ comment.actor | user_link }} <a href="{{ comment.url }}" class="text-secondary">&#x21D2;</a> {{ comment.body | html.escape }}</li>
+{{ end # for comment ~}}
+{{ else ~}}
+<li class="text-truncate">{{ event.actor | user_link }} <code>{{ event.kind }}</code></li>
+{{ end # if event.kind ~}}
+{{ end # for event ~}}
+</ul>
+{{ end # if ~}}
+{{ end # for issue ~}}
 
 </div>
 

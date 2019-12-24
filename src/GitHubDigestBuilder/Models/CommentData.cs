@@ -24,6 +24,10 @@ namespace GitHubDigestBuilder.Models
 				{
 					return $"{pullRequest.Repo.Report.WebBase}/{pullRequest.Repo.Name}/pull/{pullRequest.Number}#{(Conversation.FilePath == null ? "issuecomment-" : "discussion_r")}{CommentId}";
 				}
+				else if (Conversation.Issue is IssueData issue)
+				{
+					return $"{issue.Repo.Report.WebBase}/{issue.Repo.Name}/pull/{issue.Number}#{(Conversation.FilePath == null ? "issuecomment-" : "discussion_r")}{CommentId}";
+				}
 				else
 				{
 					throw new InvalidOperationException();
