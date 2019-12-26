@@ -92,10 +92,18 @@ a:hover, a:focus { text-decoration: none }
 {{ if !pull_request.body.empty? ~}}
 <li class="text-truncate">{{ event.actor | user_link }} <a href="{{ web_base }}/{{ pull_request.repo.name }}/pull/{{ pull_request.number }}" class="text-secondary">&#x21D2;</a> {{ pull_request.body | html.escape }}</li>
 {{ end # if ~}}
+{{ else if event.kind == 'reopened' ~}}
+<li class="text-truncate">{{ event.actor | user_link }} reopened pull request</li>
+{{ else if event.kind == 'renamed' ~}}
+<li class="text-truncate">{{ event.actor | user_link }} renamed pull request from <span class="text-secondary">{{ event.rename_from | html.escape }}</span> to <span class="text-secondary">{{ event.rename_to | html.escape }}</span></li>
+{{ else if event.kind == 'assigned' ~}}
+<li class="text-truncate">{{ event.source_user | user_link }} assigned pull request to {{ event.target_user | user_link }}</li>
+{{ else if event.kind == 'ready_for_review' ~}}
+<li class="text-truncate">{{ event.actor | user_link }} marked pull request as ready for review</li>
 {{ else if event.kind == 'merged' ~}}
-<li class="text-truncate">{{ event.actor | user_link }} merged pull request into {{ pull_request.to_branch | branch_link }}</li>
+<li class="text-truncate">{{ event.actor | user_link }} merged {{ if event.commit }}{{ event.commit | commit_link }}{{ else }}pull request{{ end }} into {{ pull_request.to_branch | branch_link }}</li>
 {{ else if event.kind == 'closed' ~}}
-<li class="text-truncate">{{ event.actor | user_link }} closed pull request</li>
+<li class="text-truncate">{{ event.actor | user_link }} closed pull request {{ if event.commit }}via {{ event.commit | commit_link }}{{ end }}</li>
 {{ else if event.kind == 'comment-created' ~}}
 {{ for comment in event.conversation.comments ~}}
 <li class="text-truncate">{{ comment.actor | user_link }} <a href="{{ comment.url }}" class="text-secondary">&#x21D2;</a> {{ comment.body | html.escape }}</li>
@@ -108,6 +116,16 @@ a:hover, a:focus { text-decoration: none }
 {{ end # for comment ~}}
 </ul>
 </li>
+{{ else if event.kind == 'review_requested' ~}}
+<li class="text-truncate">{{ event.source_user | user_link }} requested a review from {{ event.target_user | user_link }}</li>
+{{ else if event.kind == 'head_ref_force_pushed' ~}}
+<li class="text-truncate">{{ event.actor | user_link }} force-pushed</li>
+{{ else if event.kind == 'referenced' ~}}
+<li class="text-truncate">{{ event.actor | user_link }} referenced pull request in {{ event.commit | commit_link }}</li>
+{{ else if event.kind == 'labeled' ~}}
+<li class="text-truncate">{{ event.actor | user_link }} added label: <i>{{ event.label_name | html.escape }}</i></li>
+{{ else if event.kind == 'unlabeled' ~}}
+<li class="text-truncate">{{ event.actor | user_link }} removed label: <i>{{ event.label_name | html.escape }}</i></li>
 {{ else ~}}
 <li class="text-truncate">{{ event.actor | user_link }} <code>{{ event.kind }}</code></li>
 {{ end # if event.kind ~}}

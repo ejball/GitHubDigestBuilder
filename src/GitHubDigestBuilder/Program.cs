@@ -331,7 +331,7 @@ namespace GitHubDigestBuilder
 							events.Add(new RawEventData
 							{
 								EventId = eventId,
-								EventType = "IssuesEvent",
+								EventType = "IssuesApiEvent",
 								ActorName = actorName,
 								CreatedUtc = createdUtc,
 								RepoName = repoName,
@@ -375,26 +375,31 @@ namespace GitHubDigestBuilder
 
 				rawEvents = rawEvents.OrderBy(x => x.CreatedUtc).ToList();
 
+				RepoData createRepo(string name) =>
+					new RepoData
+					{
+						Report = report,
+						Name = name,
+					};
+
+				UserData createUser(string name) =>
+					new UserData
+					{
+						Report = report,
+						Name = name,
+					};
+
 				foreach (var rawEvent in rawEvents)
 				{
 					var repoName = rawEvent.RepoName;
-
-					var actor = new UserData
-					{
-						Report = report,
-						Name = rawEvent.ActorName,
-					};
+					var actor = createUser(rawEvent.ActorName);
 
 					RepoData getOrAddRepo()
 					{
 						var repo = report.Repos.SingleOrDefault(x => x.Name == repoName);
 						if (repo == null)
 						{
-							repo = new RepoData
-							{
-								Report = report,
-								Name = repoName,
-							};
+							repo = createRepo(repoName);
 							report.Repos.Add(repo);
 						}
 
@@ -533,6 +538,7 @@ namespace GitHubDigestBuilder
 								push.NewCommits.Add(new CommitData
 								{
 									Branch = branch,
+									Repo = branch.Repo,
 									Sha = sha,
 									Subject = subject,
 									Remarks = remarks,
@@ -636,21 +642,13 @@ namespace GitHubDigestBuilder
 						pullRequest.FromBranch = new BranchData
 						{
 							Name = pullRequestElement.GetProperty("head", "ref").GetString(),
-							Repo = new RepoData
-							{
-								Name = pullRequestElement.GetProperty("head", "repo", "full_name").GetString(),
-								Report = report,
-							},
+							Repo = createRepo(pullRequestElement.GetProperty("head", "repo", "full_name").GetString()),
 						};
 
 						pullRequest.ToBranch = new BranchData
 						{
 							Name = pullRequestElement.GetProperty("base", "ref").GetString(),
-							Repo = new RepoData
-							{
-								Name = pullRequestElement.GetProperty("base", "repo", "full_name").GetString(),
-								Report = report,
-							},
+							Repo = createRepo(pullRequestElement.GetProperty("base", "repo", "full_name").GetString()),
 						};
 
 						var title = pullRequestElement.GetProperty("title").GetString();
@@ -663,7 +661,7 @@ namespace GitHubDigestBuilder
 
 						if (eventType == "PullRequestEvent" && action == "closed")
 						{
-							addPullRequestEvent(pullRequest, pullRequestElement.GetProperty("merged").GetBoolean() ? "merged" : "closed");
+							// duplicated by issue events API
 						}
 						else if (eventType == "PullRequestReviewCommentEvent" && action == "created")
 						{
@@ -699,7 +697,7 @@ namespace GitHubDigestBuilder
 					}
 					else if (eventType == "IssuesEvent")
 					{
-						var action = payload.TryGetProperty("action")?.GetString() ?? payload.GetProperty("event").GetString();
+						var action = payload.GetProperty("action").GetString();
 						var issueElement = payload.GetProperty("issue");
 						var number = issueElement.GetProperty("number").GetInt32();
 						var issue = getOrAddIssue(number);
@@ -790,6 +788,74 @@ namespace GitHubDigestBuilder
 					else if (eventType == "ForkEvent")
 					{
 						// ignore fork events
+					}
+					else if (eventType == "IssuesApiEvent")
+					{
+						var action = payload.GetProperty("event").GetString();
+						if (action != "mentioned" && action != "subscribed" && action != "head_ref_deleted")
+						{
+							var issueElement = payload.GetProperty("issue");
+							var number = issueElement.GetProperty("number").GetInt32();
+
+							if (issueElement.TryGetProperty("pull_request") != null)
+							{
+								var pullRequest = getOrAddPullRequest(number);
+
+								var title = issueElement.GetProperty("title").GetString();
+								if (title != null)
+									pullRequest.Title = title;
+
+								var body = issueElement.GetProperty("body").GetString();
+								if (body != null)
+									pullRequest.Body = body;
+
+								var eventData = addPullRequestEvent(pullRequest, action);
+
+								if ((payload.TryGetProperty("review_requester", "login")?.GetString() ??
+									payload.TryGetProperty("assigner", "login")?.GetString()) is string sourceUserName)
+								{
+									eventData.SourceUser = createUser(sourceUserName);
+								}
+
+								if ((payload.TryGetProperty("requested_reviewer", "login")?.GetString() ??
+									payload.TryGetProperty("assignee", "login")?.GetString()) is string targetUserName)
+								{
+									eventData.TargetUser = createUser(targetUserName);
+								}
+
+								if (payload.TryGetProperty("commit_id")?.GetString() is string commitId)
+								{
+									eventData.Commit = new CommitData
+									{
+										Repo = createRepo(repoName),
+										Sha = commitId,
+									};
+								}
+
+								if (payload.TryGetProperty("label", "name")?.GetString() is string labelName)
+									eventData.LabelName = labelName;
+
+								if (payload.TryGetProperty("rename", "from")?.GetString() is string renameFrom)
+									eventData.RenameFrom = renameFrom;
+
+								if (payload.TryGetProperty("rename", "to")?.GetString() is string renameTo)
+									eventData.RenameTo = renameTo;
+							}
+							else
+							{
+								var issue = getOrAddIssue(number);
+
+								var title = issueElement.GetProperty("title").GetString();
+								if (title != null)
+									issue.Title = title;
+
+								var body = issueElement.GetProperty("body").GetString();
+								if (body != null)
+									issue.Body = body;
+
+								addIssueEvent(issue, action);
+							}
+						}
 					}
 					else
 					{
