@@ -4,9 +4,9 @@ namespace GitHubDigestBuilder.Models
 {
 	internal sealed class RepoData
 	{
-		public ReportData Report { get; set; }
+		public ReportData? Report { get; set; }
 
-		public string Name { get; set; }
+		public string? Name { get; set; }
 
 		public List<PullRequestData> PullRequests { get; } = new List<PullRequestData>();
 
@@ -20,6 +20,6 @@ namespace GitHubDigestBuilder.Models
 
 		public List<IssueData> Issues { get; } = new List<IssueData>();
 
-		public string Url => $"{Report.WebBase}/{Name}";
+		public string Url => $"{Report!.WebBase}/{Name}";
 	}
 }

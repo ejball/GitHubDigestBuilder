@@ -11,7 +11,7 @@ namespace GitHubDigestBuilder.Models
 
 		public DateTimeOffset Now { get; set; }
 
-		public string WebBase { get; set; }
+		public string? WebBase { get; set; }
 
 		public bool AutoRefresh { get; set; }
 

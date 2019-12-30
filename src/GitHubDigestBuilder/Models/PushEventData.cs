@@ -4,11 +4,11 @@ namespace GitHubDigestBuilder.Models
 {
 	internal sealed class PushEventData : EventData
 	{
-		public BranchData Branch { get; set; }
+		public BranchData? Branch { get; set; }
 
-		public string BeforeSha { get; set; }
+		public string? BeforeSha { get; set; }
 
-		public string AfterSha { get; set; }
+		public string? AfterSha { get; set; }
 
 		public int CommitCount { get; set; }
 
@@ -18,6 +18,6 @@ namespace GitHubDigestBuilder.Models
 
 		public bool CanMerge { get; set; }
 
-		public string Url => CommitCount == 1 ? $"{Repo.Report.WebBase}/{Repo.Name}/commit/{AfterSha}" : $"{Repo.Report.WebBase}/{Repo.Name}/compare/{BeforeSha}...{AfterSha}";
+		public string Url => CommitCount == 1 ? $"{Repo!.Report!.WebBase}/{Repo!.Name}/commit/{AfterSha}" : $"{Repo!.Report!.WebBase}/{Repo!.Name}/compare/{BeforeSha}...{AfterSha}";
 	}
 }

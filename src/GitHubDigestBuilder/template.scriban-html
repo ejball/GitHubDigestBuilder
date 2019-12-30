@@ -44,7 +44,11 @@ a:hover, a:focus { text-decoration: none }
 {{- end # func ~}}
 
 {{- func user_link -}}
-<a href="{{ $0.url }}" class="text-body font-weight-bold">{{ $0.name | html.escape }}</a>
+{{ if $0 }}<a href="{{ $0.url }}" class="text-body font-weight-bold">{{ $0.name | html.escape }}</a>{{ else }}(no user){{ end }}
+{{- end # func ~}}
+
+{{- func team_link -}}
+{{ if $0 }}<a href="{{ $0.url }}" class="text-body font-weight-bold">{{ $0.org | html.escape }}/{{ $0.name | html.escape }}</a>{{ else }}(no team){{ end }}
 {{- end # func ~}}
 
 {{- func commits_text -}}
@@ -117,7 +121,7 @@ a:hover, a:focus { text-decoration: none }
 </ul>
 </li>
 {{ else if event.kind == 'review_requested' ~}}
-<li class="text-truncate">{{ event.source_user | user_link }} requested a review from {{ event.target_user | user_link }}</li>
+<li class="text-truncate">{{ event.source_user | user_link }} requested a review from {{ if event.target_team }}{{ event.target_team | team_link }}{{ else }}{{ event.target_user | user_link }}{{ end }}</li>
 {{ else if event.kind == 'head_ref_force_pushed' ~}}
 <li class="text-truncate">{{ event.actor | user_link }} force-pushed</li>
 {{ else if event.kind == 'referenced' ~}}

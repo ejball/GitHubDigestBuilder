@@ -6,6 +6,10 @@
     <LangVersion>8.0</LangVersion>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
+    <Description>A tool that creates a digest of daily GitHub activity.</Description>
+    <PackageTags>GitHub activity digest report</PackageTags>
+    <IsPackable>true</IsPackable>
+    <PackAsTool>true</PackAsTool>
   </PropertyGroup>
 
   <ItemGroup>
@@ -14,8 +18,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="ArgsReading" Version="2.1.0" />
-    <PackageReference Include="Scriban" Version="2.1.0" />
+    <PackageReference Include="ArgsReading" Version="2.2.0" />
+    <PackageReference Include="Scriban" Version="2.1.1" />
     <PackageReference Include="YamlDotNet" Version="8.0.0" />
   </ItemGroup>
 
