@@ -90,9 +90,10 @@ namespace GitHubDigestBuilder
 						await using var cacheReadStream = File.OpenRead(cacheFile);
 						cacheElement = (await JsonDocument.ParseAsync(cacheReadStream)).RootElement;
 
-						// if we're asking for the same date, and the date is not today, assume the data is still good
+						// if we're asking for the same date, and the cache was generated for a previous day, assume it is still good
 						var cacheDateIso = cacheElement.GetProperty("date").GetString();
-						if (cacheDateIso == dateIso && dateIso != todayIso)
+						var cacheTodayIso = cacheElement.TryGetProperty("today")?.GetString();
+						if (cacheDateIso == dateIso && string.CompareOrdinal(cacheDateIso, cacheTodayIso) < 0)
 						{
 							return new PagedDownloadResult(
 								Enum.Parse<DownloadStatus>(cacheElement.GetProperty("status").GetString()),
@@ -153,6 +154,7 @@ namespace GitHubDigestBuilder
 						status = status.ToString(),
 						etag,
 						date = dateIso,
+						today = todayIso,
 						items,
 					}, new JsonSerializerOptions { WriteIndented = true });
 
