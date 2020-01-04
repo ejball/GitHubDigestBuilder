@@ -674,7 +674,7 @@ namespace GitHubDigestBuilder
 
 						if (eventType == "PullRequestEvent" && action == "closed")
 						{
-							// duplicated by issue events API
+							addPullRequestEvent(pullRequest, pullRequestElement.GetProperty("merged").GetBoolean() ? "merged" : "closed");
 						}
 						else if (eventType == "PullRequestReviewCommentEvent" && action == "created")
 						{
@@ -892,6 +892,36 @@ namespace GitHubDigestBuilder
 
 				foreach (var repo in report.Repos)
 				{
+					foreach (var pullRequest in repo.PullRequests)
+					{
+						// find redundant pull request close events
+						foreach (var redundantCloseEvent in pullRequest.Events
+							.OfType<PullRequestEventData>()
+							.Where(x => x.Kind == "closed" || x.Kind == "merged")
+							.OrderBy(x => x.Kind == "merged")
+							.ThenBy(x => x.Commit != null)
+							.SkipLast(1)
+							.ToList())
+						{
+							pullRequest.Events.Remove(redundantCloseEvent);
+						}
+
+						// remove reference to pull request in merge commit
+						var mergeCommit = pullRequest.Events
+							.OfType<PullRequestEventData>()
+							.Where(x => x.Kind == "merged" && x.Commit != null)
+							.Select(x => x.Commit)
+							.FirstOrDefault();
+						if (mergeCommit != null)
+						{
+							var mergeReference = pullRequest.Events
+								.OfType<PullRequestEventData>()
+								.FirstOrDefault(x => x.Kind == "referenced" && x.Commit?.Sha == mergeCommit.Sha);
+							if (mergeReference != null)
+								pullRequest.Events.Remove(mergeReference);
+						}
+					}
+
 					replaceList(repo.PullRequests, repo.PullRequests.OrderBy(x => x.Number));
 					replaceList(repo.Issues, repo.Issues.OrderBy(x => x.Number));
 				}
