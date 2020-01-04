@@ -178,21 +178,21 @@ namespace GitHubDigestBuilder
 						report.Warnings.Add(text);
 				}
 
-				var sourceGitHubDigestBuilders = new List<string>();
+				var sourceRepoNames = new List<string>();
 				var sourceRepoIndices = new Dictionary<string, int>();
 
-				void addRepoForSource(string GitHubDigestBuilder, int sourceIndex)
+				void addRepoForSource(string repoName, int sourceIndex)
 				{
-					if (!sourceRepoIndices.ContainsKey(GitHubDigestBuilder))
+					if (!sourceRepoIndices.ContainsKey(repoName))
 					{
-						sourceGitHubDigestBuilders.Add(GitHubDigestBuilder);
-						sourceRepoIndices.Add(GitHubDigestBuilder, sourceIndex);
+						sourceRepoNames.Add(repoName);
+						sourceRepoIndices.Add(repoName, sourceIndex);
 					}
 				}
 
 				async Task addReposForSource(string sourceKind, string sourceName, int sourceIndex, string? topic)
 				{
-					var orgGitHubDigestBuilders = new HashSet<string>();
+					var orgRepoNames = new HashSet<string>();
 					var result = await loadPagesAsync($"{sourceKind}/{sourceName}/repos?sort=updated&per_page=100",
 						accepts: new[] { "application/vnd.github.mercy-preview+json" }, maxPageCount: 100);
 
@@ -203,12 +203,12 @@ namespace GitHubDigestBuilder
 							!repoElement.GetProperty("disabled").GetBoolean() &&
 							(topic == null || repoElement.GetProperty("topics").EnumerateArray().Select(x => x.GetString()).Any(x => x == topic)))
 						{
-							orgGitHubDigestBuilders.Add(repoElement.GetProperty("full_name").GetString());
+							orgRepoNames.Add(repoElement.GetProperty("full_name").GetString());
 						}
 					}
 
-					foreach (var orgGitHubDigestBuilder in orgGitHubDigestBuilders)
-						addRepoForSource(orgGitHubDigestBuilder, sourceIndex);
+					foreach (var orgRepoName in orgRepoNames)
+						addRepoForSource(orgRepoName, sourceIndex);
 
 					if (result.Status == DownloadStatus.TooMuchActivity)
 						addWarning($"Too many updated repositories found for {sourceName}.");
@@ -284,7 +284,7 @@ namespace GitHubDigestBuilder
 							var eventId = eventElement.GetProperty("id").GetString();
 							var eventType = eventElement.GetProperty("type").GetString();
 							var actorName = eventElement.GetProperty("actor", "login").GetString();
-							var GitHubDigestBuilder = eventElement.GetProperty("repo", "name").GetString();
+							var repoName = eventElement.GetProperty("repo", "name").GetString();
 							var payload = eventElement.GetProperty("payload");
 
 							if (!handledEventIds.Add(eventId))
@@ -299,7 +299,7 @@ namespace GitHubDigestBuilder
 								EventType = eventType,
 								ActorName = actorName,
 								CreatedUtc = createdUtc,
-								RepoName = GitHubDigestBuilder,
+								RepoName = repoName,
 								Payload = payload,
 							});
 						}
@@ -309,10 +309,10 @@ namespace GitHubDigestBuilder
 					return (events, result.Status);
 				}
 
-				async Task<(IReadOnlyList<RawEventData> Events, DownloadStatus Status)> loadIssueEventsAsync(string GitHubDigestBuilder)
+				async Task<(IReadOnlyList<RawEventData> Events, DownloadStatus Status)> loadIssueEventsAsync(string repoName)
 				{
 					var events = new List<RawEventData>();
-					var result = await loadPagesAsync($"repos/{GitHubDigestBuilder}/issues/events?per_page=100",
+					var result = await loadPagesAsync($"repos/{repoName}/issues/events?per_page=100",
 						accepts: new[] { "application/vnd.github.v3+json" }, maxPageCount: 10,
 						isLastPage: page => page.EnumerateArray().Any(x => ParseDateTime(x.GetProperty("created_at").GetString()) < startDateTimeUtc));
 
@@ -336,7 +336,7 @@ namespace GitHubDigestBuilder
 								EventType = "IssuesApiEvent",
 								ActorName = actorName,
 								CreatedUtc = createdUtc,
-								RepoName = GitHubDigestBuilder,
+								RepoName = repoName,
 								Payload = eventElement,
 							});
 						}
@@ -348,21 +348,21 @@ namespace GitHubDigestBuilder
 
 				var rawEvents = new List<RawEventData>();
 
-				foreach (var sourceGitHubDigestBuilder in sourceGitHubDigestBuilders)
+				foreach (var sourceRepoName in sourceRepoNames)
 				{
-					var (rawRepoEvents, repoStatus) = await loadEventsAsync("repos", sourceGitHubDigestBuilder);
+					var (rawRepoEvents, repoStatus) = await loadEventsAsync("repos", sourceRepoName);
 					rawEvents.AddRange(rawRepoEvents);
 					if (repoStatus == DownloadStatus.TooMuchActivity)
-						addWarning($"{sourceGitHubDigestBuilder} repository had too much activity.");
+						addWarning($"{sourceRepoName} repository had too much activity.");
 					else if (repoStatus == DownloadStatus.NotFound)
-						addWarning($"{sourceGitHubDigestBuilder} repository not found.");
+						addWarning($"{sourceRepoName} repository not found.");
 
-					var (rawRepoIssueEvents, repoIssueStatus) = await loadIssueEventsAsync(sourceGitHubDigestBuilder);
+					var (rawRepoIssueEvents, repoIssueStatus) = await loadIssueEventsAsync(sourceRepoName);
 					rawEvents.AddRange(rawRepoIssueEvents);
 					if (repoIssueStatus == DownloadStatus.TooMuchActivity)
-						addWarning($"{sourceGitHubDigestBuilder} repository had too much issue activity.");
+						addWarning($"{sourceRepoName} repository had too much issue activity.");
 					else if (repoIssueStatus == DownloadStatus.NotFound)
-						addWarning($"{sourceGitHubDigestBuilder} repository not found.");
+						addWarning($"{sourceRepoName} repository not found.");
 				}
 
 				foreach (var sourceUserName in sourceUserNames)
