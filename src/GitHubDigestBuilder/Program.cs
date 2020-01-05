@@ -316,7 +316,7 @@ namespace GitHubDigestBuilder
 								continue;
 
 							var isNetwork = sourceKind == "networks";
-							if (isNetwork && eventType != "PushEvent")
+							if (isNetwork && eventType != "CreateEvent" && eventType != "PushEvent")
 								continue;
 
 							events.Add(new RawEventData
@@ -536,6 +536,21 @@ namespace GitHubDigestBuilder
 						return eventData;
 					}
 
+					List<(string RepoName, int Number)> getAssociatedPullRequests(string branchName)
+					{
+						var pullRequests = new HashSet<(string RepoName, int Number)>();
+						if (pullRequestBranches.TryGetValue((repoName, branchName), out var pullRequestEvents))
+						{
+							foreach (var pullRequestEvent in pullRequestEvents
+								.OrderByDescending(x => x.When)
+								.TakeWhile(x => x.When >= rawEvent.CreatedUtc || x.Action != "closed"))
+							{
+								pullRequests.Add((pullRequestEvent.TargetRepo, pullRequestEvent.TargetNumber));
+							}
+						}
+						return pullRequests.ToList();
+					}
+
 					var payload = rawEvent.Payload;
 					var eventType = rawEvent.EventType;
 
@@ -547,17 +562,7 @@ namespace GitHubDigestBuilder
 						{
 							var branchName = refName.Substring(branchRefPrefix.Length);
 
-							var associatedPullRequests = new HashSet<(string RepoName, int Number)>();
-							if (pullRequestBranches.TryGetValue((repoName, branchName), out var pullRequestEvents))
-							{
-								foreach (var pullRequestEvent in pullRequestEvents
-									.OrderByDescending(x => x.When)
-									.TakeWhile(x => x.When >= rawEvent.CreatedUtc || x.Action != "closed"))
-								{
-									associatedPullRequests.Add((pullRequestEvent.TargetRepo, pullRequestEvent.TargetNumber));
-								}
-							}
-
+							var associatedPullRequests = getAssociatedPullRequests(branchName);
 							if (associatedPullRequests.Count != 0)
 							{
 								foreach (var associatedPullRequest in associatedPullRequests)
@@ -638,22 +643,55 @@ namespace GitHubDigestBuilder
 
 						if (refType == "tag")
 						{
-							var repo = getOrAddRepo();
-							repo.TagEvents.Add(new TagEventData
+							if (!rawEvent.IsNetwork)
 							{
-								Kind = "create-tag",
-								Repo = repo,
-								Actor = actor,
-								Tag = new TagData
+								var repo = getOrAddRepo();
+								repo.TagEvents.Add(new TagEventData
 								{
-									Name = refName,
+									Kind = "create-tag",
 									Repo = repo,
-								},
-							});
+									Actor = actor,
+									Tag = new TagData
+									{
+										Name = refName,
+										Repo = repo,
+									},
+								});
+							}
 						}
 						else if (refType == "branch")
 						{
-							// ignore created branches
+							var associatedPullRequests = getAssociatedPullRequests(refName);
+							if (associatedPullRequests.Count != 0)
+							{
+								foreach (var associatedPullRequest in associatedPullRequests)
+								{
+									var pullRequest = getOrAddPullRequest(associatedPullRequest.Number, associatedPullRequest.RepoName);
+									pullRequest.Events.Add(new BranchEventData
+									{
+										Kind = "create-branch",
+										Repo = pullRequest.Repo,
+										Actor = actor,
+										Branch = new BranchData
+										{
+											Name = refName,
+											Repo = createRepo(repoName),
+										},
+									});
+								}
+							}
+							else if (!rawEvent.IsNetwork)
+							{
+								var branch = getOrAddBranch(refName);
+
+								branch.Events.Add(new BranchEventData
+								{
+									Kind = "create-branch",
+									Repo = branch.Repo,
+									Actor = actor,
+									Branch = branch,
+								});
+							}
 						}
 						else
 						{

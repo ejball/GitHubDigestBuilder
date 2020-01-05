@@ -20,6 +20,8 @@ namespace GitHubDigestBuilder.Models
 
 		public List<IssueData> Issues { get; } = new List<IssueData>();
 
+		public string? Org => Name?[..Name.IndexOf('/')];
+
 		public string Url => $"{Report!.WebBase}/{Name}";
 	}
 }
