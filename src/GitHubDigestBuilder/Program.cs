@@ -269,6 +269,8 @@ namespace GitHubDigestBuilder
 					}
 				}
 
+				var pullRequestBranches = new Dictionary<(string SourceRepo, string SourceBranch), List<(string TargetRepo, int TargetNumber, DateTime When, string? Action)>>();
+
 				async Task<(IReadOnlyList<RawEventData> Events, DownloadStatus Status)> loadEventsAsync(string sourceKind, string sourceName)
 				{
 					var events = new List<RawEventData>();
@@ -279,7 +281,7 @@ namespace GitHubDigestBuilder
 					foreach (var eventElement in result.Elements)
 					{
 						var createdUtc = ParseDateTime(eventElement.GetProperty("created_at").GetString());
-						if (createdUtc >= startDateTimeUtc && createdUtc < endDateTimeUtc)
+						if (createdUtc >= startDateTimeUtc)
 						{
 							var eventId = eventElement.GetProperty("id").GetString();
 							var eventType = eventElement.GetProperty("type").GetString();
@@ -291,6 +293,25 @@ namespace GitHubDigestBuilder
 								continue;
 
 							if (usersToExclude.Contains(actorName))
+								continue;
+
+							var pullRequestElement = payload.TryGetProperty("pull_request");
+							if (pullRequestElement != null)
+							{
+								var number = pullRequestElement.Value.TryGetProperty("number")?.GetInt32();
+								var sourceRepo = pullRequestElement.Value.TryGetProperty("head", "repo", "full_name")?.GetString();
+								var sourceBranch = pullRequestElement.Value.TryGetProperty("head", "ref")?.GetString();
+								var isOpen = pullRequestElement.Value.TryGetProperty("state")?.GetString() == "open";
+								var action = eventType == "PullRequestEvent" ? payload.TryGetProperty("action")?.GetString() : null;
+								if (number != null && sourceRepo != null && sourceBranch != null && (isOpen || action == "closed"))
+								{
+									if (!pullRequestBranches.TryGetValue((sourceRepo, sourceBranch), out var pullRequestInfo))
+										pullRequestBranches[(sourceRepo, sourceBranch)] = pullRequestInfo = new List<(string, int, DateTime, string?)>();
+									pullRequestInfo.Add((repoName, number.Value, createdUtc, action));
+								}
+							}
+
+							if (createdUtc >= endDateTimeUtc)
 								continue;
 
 							events.Add(new RawEventData
@@ -407,12 +428,14 @@ namespace GitHubDigestBuilder
 					var repoName = rawEvent.RepoName!;
 					var actor = createUser(rawEvent.ActorName!);
 
-					RepoData getOrAddRepo()
+					RepoData getOrAddRepo(string? actualRepoName = null)
 					{
-						var repo = report.Repos.SingleOrDefault(x => x.Name == repoName);
+						actualRepoName ??= repoName;
+
+						var repo = report.Repos.SingleOrDefault(x => x.Name == actualRepoName);
 						if (repo == null)
 						{
-							repo = createRepo(repoName);
+							repo = createRepo(actualRepoName);
 							report.Repos.Add(repo);
 						}
 
@@ -439,9 +462,9 @@ namespace GitHubDigestBuilder
 						return branch;
 					}
 
-					PullRequestData getOrAddPullRequest(int number)
+					PullRequestData getOrAddPullRequest(int number, string? actualRepoName = null)
 					{
-						var repo = getOrAddRepo();
+						var repo = getOrAddRepo(actualRepoName);
 						var pullRequest = repo.PullRequests.SingleOrDefault(x => x.Number == number);
 						if (pullRequest == null)
 						{
@@ -507,55 +530,83 @@ namespace GitHubDigestBuilder
 						if (refName?.StartsWith(branchRefPrefix, StringComparison.Ordinal) == true)
 						{
 							var branchName = refName.Substring(branchRefPrefix.Length);
-							var branch = getOrAddBranch(branchName);
 
-							var beforeSha = payload.TryGetProperty("before")?.GetString();
-							var afterSha = payload.TryGetProperty("head")?.GetString();
-							var commitCount = payload.TryGetProperty("size")?.GetInt32() ?? 0;
-							var distinctCommitCount = payload.TryGetProperty("distinct_size")?.GetInt32() ?? 0;
-							var commits = payload.TryGetProperty("commits")?.EnumerateArray().ToList() ?? new List<JsonElement>();
-							var canMerge = commitCount == commits.Count;
-
-							var push = branch.Events.LastOrDefault() as PushEventData;
-							if (push == null ||
-								push.Actor?.Name != actor.Name ||
-								push.Branch?.Name != branchName ||
-								push.AfterSha != beforeSha ||
-								!push.CanMerge ||
-								!canMerge)
+							var associatedPullRequests = new HashSet<(string RepoName, int Number)>();
+							if (pullRequestBranches.TryGetValue((repoName, branchName), out var pullRequestEvents))
 							{
-								push = new PushEventData
+								foreach (var pullRequestEvent in pullRequestEvents
+									.OrderByDescending(x => x.When)
+									.TakeWhile(x => x.When >= rawEvent.CreatedUtc || x.Action != "closed"))
 								{
-									Kind = "push",
-									Repo = branch.Repo,
-									Actor = actor,
-									Branch = branch,
-									BeforeSha = beforeSha,
-									CanMerge = canMerge,
-								};
-								branch.Events.Add(push);
+									associatedPullRequests.Add((pullRequestEvent.TargetRepo, pullRequestEvent.TargetNumber));
+								}
 							}
 
-							push.AfterSha = afterSha;
-							push.CommitCount += commitCount;
-							push.NewCommitCount += distinctCommitCount;
-
-							foreach (var commit in commits.Where(x => x.TryGetProperty("distinct")?.GetBoolean() == true))
+							if (associatedPullRequests.Count != 0)
 							{
-								var message = commit.TryGetProperty("message")?.GetString() ?? "";
-								var messageMatch = Regex.Match(message, @"^([^\r\n]*)(.*)$", RegexOptions.Singleline);
-								var subject = messageMatch.Groups[1].Value.Trim();
-								var remarks = Regex.Replace(messageMatch.Groups[2].Value.Trim(), @"\s+", " ");
-								var sha = commit.GetProperty("sha").GetString();
+								foreach (var associatedPullRequest in associatedPullRequests)
+									addPushEvent(null, getOrAddPullRequest(associatedPullRequest.Number, associatedPullRequest.RepoName));
+							}
+							else
+							{
+								addPushEvent(getOrAddBranch(branchName), null);
+							}
 
-								push.NewCommits.Add(new CommitData
+							void addPushEvent(BranchData? branch, PullRequestData? pullRequest)
+							{
+								var events = branch?.Events ?? pullRequest?.Events ?? throw new InvalidOperationException();
+
+								var beforeSha = payload.TryGetProperty("before")?.GetString();
+								var afterSha = payload.TryGetProperty("head")?.GetString();
+								var commitCount = payload.TryGetProperty("size")?.GetInt32() ?? 0;
+								var distinctCommitCount = payload.TryGetProperty("distinct_size")?.GetInt32() ?? 0;
+								var commits = payload.TryGetProperty("commits")?.EnumerateArray().ToList() ?? new List<JsonElement>();
+								var canMerge = commitCount == commits.Count;
+
+								var pushRepo = branch?.Repo ?? createRepo(repoName);
+
+								var push = events.LastOrDefault() as PushEventData;
+								if (push == null ||
+									push.Actor?.Name != actor.Name ||
+									push.Branch?.Name != branch?.Name ||
+									push.PullRequest?.Number != pullRequest?.Number ||
+									push.AfterSha != beforeSha ||
+									!push.CanMerge ||
+									!canMerge)
 								{
-									Branch = branch,
-									Repo = branch.Repo,
-									Sha = sha,
-									Subject = subject,
-									Remarks = remarks,
-								});
+									push = new PushEventData
+									{
+										Kind = "push",
+										Repo = pushRepo,
+										Actor = actor,
+										Branch = branch,
+										PullRequest = pullRequest,
+										BeforeSha = beforeSha,
+										CanMerge = canMerge,
+									};
+									events.Add(push);
+								}
+
+								push.AfterSha = afterSha;
+								push.CommitCount += commitCount;
+								push.NewCommitCount += distinctCommitCount;
+
+								foreach (var commit in commits.Where(x => x.TryGetProperty("distinct")?.GetBoolean() == true))
+								{
+									var message = commit.TryGetProperty("message")?.GetString() ?? "";
+									var messageMatch = Regex.Match(message, @"^([^\r\n]*)(.*)$", RegexOptions.Singleline);
+									var subject = messageMatch.Groups[1].Value.Trim();
+									var remarks = Regex.Replace(messageMatch.Groups[2].Value.Trim(), @"\s+", " ");
+									var sha = commit.GetProperty("sha").GetString();
+
+									push.NewCommits.Add(new CommitData
+									{
+										Repo = pushRepo,
+										Sha = sha,
+										Subject = subject,
+										Remarks = remarks,
+									});
+								}
 							}
 						}
 						else

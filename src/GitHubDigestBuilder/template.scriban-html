@@ -74,6 +74,17 @@ a:hover, a:focus { text-decoration: none }
 <p><a href="./{{ previous_date | format 'yyyy-MM-dd' }}.html">« previous</a> | <a href="./">latest »</a></p>
 {{- end # func ~}}
 
+{{- func push_event ~}}
+{{ $0.actor | user_link }} pushed {{ $0 | commits_link }}
+{{ if !$0.new_commits.empty? && $0.commit_count < 100 ~}}
+<ul class="list-unstyled ml-4">
+{{ for commit in $0.new_commits ~}}
+<li class="text-truncate">{{ commit | commit_link }} {{ commit.subject }} <span class="text-muted">{{ commit.remarks }}</span></li>
+{{ end # for commit ~}}
+</ul>
+{{ end #if ~}}
+{{- end # func ~}}
+
 <h3>{{ date | format 'D' | html.escape }}</h3>
 
 {{ previous_next_links }}
@@ -96,7 +107,9 @@ a:hover, a:focus { text-decoration: none }
 {{ if !pull_request.events.empty? ~}}
 <ul class="list-unstyled ml-4">
 {{ for event in pull_request.events ~}}
-{{ if event.kind == 'opened' ~}}
+{{ if event.kind == 'push' }}
+<li>{{ event | push_event }}</li>
+{{ else if event.kind == 'opened' ~}}
 <li class="text-truncate">{{ event.actor | user_link }} opened pull request</li>
 {{ if !pull_request.body.empty? ~}}
 <li class="text-truncate">{{ event.actor | user_link }} <a href="{{ web_base }}/{{ pull_request.repo.name }}/pull/{{ pull_request.number }}" class="text-secondary">&#x21D2;</a> {{ pull_request.body | html.escape }}</li>
@@ -151,15 +164,7 @@ a:hover, a:focus { text-decoration: none }
 <ul class="list-unstyled ml-4">
 {{ for event in branch.events ~}}
 {{ if event.kind == 'push' }}
-<li>{{ event.actor | user_link }} pushed {{ event | commits_link }}
-{{ if !event.new_commits.empty? && event.commit_count < 100 ~}}
-<ul class="list-unstyled ml-4">
-{{ for commit in event.new_commits ~}}
-<li class="text-truncate">{{ commit | commit_link }} {{ commit.subject }} <span class="text-muted">{{ commit.remarks }}</span></li>
-{{ end # for commit ~}}
-</ul>
-{{ end #if ~}}
-</li>
+<li>{{ event | push_event }}</li>
 {{ else ~}}
 <li class="text-truncate">{{ event.actor | user_link }} <code>{{ event.kind }}</code></li>
 {{ end # if event.kind ~}}

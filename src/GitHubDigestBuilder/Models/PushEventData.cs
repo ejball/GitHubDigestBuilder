@@ -6,6 +6,8 @@ namespace GitHubDigestBuilder.Models
 	{
 		public BranchData? Branch { get; set; }
 
+		public PullRequestData? PullRequest { get; set; }
+
 		public string? BeforeSha { get; set; }
 
 		public string? AfterSha { get; set; }
