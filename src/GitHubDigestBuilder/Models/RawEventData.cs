@@ -15,6 +15,8 @@ namespace GitHubDigestBuilder.Models
 
 		public string? RepoName { get; set; }
 
+		public bool IsNetwork { get; set; }
+
 		public JsonElement Payload { get; set; }
 	}
 }

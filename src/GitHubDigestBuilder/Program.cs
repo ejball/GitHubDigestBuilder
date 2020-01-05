@@ -299,11 +299,12 @@ namespace GitHubDigestBuilder
 							if (pullRequestElement != null)
 							{
 								var number = pullRequestElement.Value.TryGetProperty("number")?.GetInt32();
+								var targetRepo = pullRequestElement.Value.TryGetProperty("base", "repo", "full_name")?.GetString();
 								var sourceRepo = pullRequestElement.Value.TryGetProperty("head", "repo", "full_name")?.GetString();
 								var sourceBranch = pullRequestElement.Value.TryGetProperty("head", "ref")?.GetString();
 								var isOpen = pullRequestElement.Value.TryGetProperty("state")?.GetString() == "open";
 								var action = eventType == "PullRequestEvent" ? payload.TryGetProperty("action")?.GetString() : null;
-								if (number != null && sourceRepo != null && sourceBranch != null && (isOpen || action == "closed"))
+								if (number != null && targetRepo == repoName && sourceRepo != null && sourceBranch != null && (isOpen || action == "closed"))
 								{
 									if (!pullRequestBranches.TryGetValue((sourceRepo, sourceBranch), out var pullRequestInfo))
 										pullRequestBranches[(sourceRepo, sourceBranch)] = pullRequestInfo = new List<(string, int, DateTime, string?)>();
@@ -314,6 +315,10 @@ namespace GitHubDigestBuilder
 							if (createdUtc >= endDateTimeUtc)
 								continue;
 
+							var isNetwork = sourceKind == "networks";
+							if (isNetwork && eventType != "PushEvent")
+								continue;
+
 							events.Add(new RawEventData
 							{
 								EventId = eventId,
@@ -321,6 +326,7 @@ namespace GitHubDigestBuilder
 								ActorName = actorName,
 								CreatedUtc = createdUtc,
 								RepoName = repoName,
+								IsNetwork = isNetwork,
 								Payload = payload,
 							});
 						}
@@ -377,6 +383,16 @@ namespace GitHubDigestBuilder
 						addWarning($"{sourceRepoName} repository had too much activity.");
 					else if (repoStatus == DownloadStatus.NotFound)
 						addWarning($"{sourceRepoName} repository not found.");
+
+					if (repoStatus != DownloadStatus.NotFound)
+					{
+						var (rawNetworkEvents, networkStatus) = await loadEventsAsync("networks", sourceRepoName);
+						rawEvents.AddRange(rawNetworkEvents);
+						if (networkStatus == DownloadStatus.TooMuchActivity)
+							addWarning($"{sourceRepoName} repository had too much network activity.");
+						else if (networkStatus == DownloadStatus.NotFound)
+							addWarning($"{sourceRepoName} repository network not found.");
+					}
 
 					var (rawRepoIssueEvents, repoIssueStatus) = await loadIssueEventsAsync(sourceRepoName);
 					rawEvents.AddRange(rawRepoIssueEvents);
@@ -547,7 +563,7 @@ namespace GitHubDigestBuilder
 								foreach (var associatedPullRequest in associatedPullRequests)
 									addPushEvent(null, getOrAddPullRequest(associatedPullRequest.Number, associatedPullRequest.RepoName));
 							}
-							else
+							else if (!rawEvent.IsNetwork)
 							{
 								addPushEvent(getOrAddBranch(branchName), null);
 							}
@@ -567,6 +583,7 @@ namespace GitHubDigestBuilder
 
 								var push = events.LastOrDefault() as PushEventData;
 								if (push == null ||
+									commitCount > 5 ||
 									push.Actor?.Name != actor.Name ||
 									push.Branch?.Name != branch?.Name ||
 									push.PullRequest?.Number != pullRequest?.Number ||
