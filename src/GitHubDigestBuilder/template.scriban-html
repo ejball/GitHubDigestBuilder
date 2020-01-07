@@ -121,6 +121,8 @@ a:hover, a:focus { text-decoration: none }
 <li class="text-truncate">{{ event.actor | user_link }} renamed pull request from <span class="text-secondary">{{ event.rename_from | html.escape }}</span> to <span class="text-secondary">{{ event.rename_to | html.escape }}</span></li>
 {{ else if event.kind == 'assigned' ~}}
 <li class="text-truncate">{{ event.source_user | user_link }} assigned pull request to {{ event.target_user | user_link }}</li>
+{{ else if event.kind == 'unassigned' ~}}
+<li class="text-truncate">{{ event.source_user | user_link }} unassigned pull request from {{ event.target_user | user_link }}</li>
 {{ else if event.kind == 'ready_for_review' ~}}
 <li class="text-truncate">{{ event.actor | user_link }} marked pull request as ready for review</li>
 {{ else if event.kind == 'merged' ~}}
