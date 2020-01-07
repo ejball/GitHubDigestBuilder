@@ -26,7 +26,6 @@ namespace GitHubDigestBuilder
 		{
 			// read command-line arguments
 			var dateString = args.ReadOption("date");
-			var autoRefresh = args.ReadFlag("auto-refresh");
 			var authToken = args.ReadOption("auth");
 			var configFilePath = args.ReadArgument();
 			args.VerifyComplete();
@@ -168,7 +167,6 @@ namespace GitHubDigestBuilder
 					Date = date,
 					PreviousDate = date.AddDays(-1),
 					WebBase = webBase,
-					AutoRefresh = autoRefresh,
 					Now = now,
 				};
 
