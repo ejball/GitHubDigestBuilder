@@ -386,7 +386,8 @@ namespace GitHubDigestBuilder
 					else if (repoStatus == DownloadStatus.NotFound)
 						addWarning($"{sourceRepoName} repository not found.");
 
-					if (repoStatus != DownloadStatus.NotFound)
+					// check repository network for push events if we know of any pull request branches
+					if (repoStatus != DownloadStatus.NotFound && pullRequestBranches.Any(prb => prb.Value.Any(x => x.TargetRepo == sourceRepoName)))
 					{
 						var (rawNetworkEvents, networkStatus) = await loadEventsAsync("networks", sourceRepoName);
 						rawEvents.AddRange(rawNetworkEvents);
