@@ -271,6 +271,8 @@ namespace GitHubDigestBuilder
 
 				async Task<(IReadOnlyList<RawEventData> Events, DownloadStatus Status)> loadEventsAsync(string sourceKind, string sourceName)
 				{
+					var isNetwork = sourceKind == "networks";
+
 					var events = new List<RawEventData>();
 					var result = await loadPagesAsync($"{sourceKind}/{sourceName}/events",
 						accepts: new[] { "application/vnd.github.v3+json" }, maxPageCount: 10,
@@ -293,27 +295,29 @@ namespace GitHubDigestBuilder
 							if (usersToExclude.Contains(actorName))
 								continue;
 
-							var pullRequestElement = payload.TryGetProperty("pull_request");
-							if (pullRequestElement != null)
+							if (!isNetwork)
 							{
-								var number = pullRequestElement.Value.TryGetProperty("number")?.GetInt32();
-								var targetRepo = pullRequestElement.Value.TryGetProperty("base", "repo", "full_name")?.GetString();
-								var sourceRepo = pullRequestElement.Value.TryGetProperty("head", "repo", "full_name")?.GetString();
-								var sourceBranch = pullRequestElement.Value.TryGetProperty("head", "ref")?.GetString();
-								var isOpen = pullRequestElement.Value.TryGetProperty("state")?.GetString() == "open";
-								var action = eventType == "PullRequestEvent" ? payload.TryGetProperty("action")?.GetString() : null;
-								if (number != null && targetRepo == repoName && sourceRepo != null && sourceBranch != null && (isOpen || action == "closed"))
+								var pullRequestElement = payload.TryGetProperty("pull_request");
+								if (pullRequestElement != null)
 								{
-									if (!pullRequestBranches.TryGetValue((sourceRepo, sourceBranch), out var pullRequestInfo))
-										pullRequestBranches[(sourceRepo, sourceBranch)] = pullRequestInfo = new List<(string, int, DateTime, string?)>();
-									pullRequestInfo.Add((repoName, number.Value, createdUtc, action));
+									var number = pullRequestElement.Value.TryGetProperty("number")?.GetInt32();
+									var targetRepo = pullRequestElement.Value.TryGetProperty("base", "repo", "full_name")?.GetString();
+									var sourceRepo = pullRequestElement.Value.TryGetProperty("head", "repo", "full_name")?.GetString();
+									var sourceBranch = pullRequestElement.Value.TryGetProperty("head", "ref")?.GetString();
+									var isOpen = pullRequestElement.Value.TryGetProperty("state")?.GetString() == "open";
+									var action = eventType == "PullRequestEvent" ? payload.TryGetProperty("action")?.GetString() : null;
+									if (number != null && targetRepo == repoName && sourceRepo != null && sourceBranch != null && (isOpen || action == "closed"))
+									{
+										if (!pullRequestBranches.TryGetValue((sourceRepo, sourceBranch), out var pullRequestInfo))
+											pullRequestBranches[(sourceRepo, sourceBranch)] = pullRequestInfo = new List<(string, int, DateTime, string?)>();
+										pullRequestInfo.Add((repoName, number.Value, createdUtc, action));
+									}
 								}
 							}
 
 							if (createdUtc >= endDateTimeUtc)
 								continue;
 
-							var isNetwork = sourceKind == "networks";
 							if (isNetwork && eventType != "CreateEvent" && eventType != "PushEvent")
 								continue;
 
