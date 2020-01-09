@@ -80,7 +80,7 @@ a:hover, a:focus { text-decoration: none }
 {{ if !$0.new_commits.empty? && $0.commit_count < 100 ~}}
 <ul class="list-unstyled ml-4">
 {{ for commit in $0.new_commits ~}}
-<li class="text-truncate">{{ commit | commit_link }} {{ commit.subject }} <span class="text-muted">{{ commit.remarks }}</span></li>
+<li class="text-truncate">{{ commit | commit_link }} {{ commit.subject | html.escape }} <span class="text-muted">{{ commit.remarks | html.escape }}</span></li>
 {{ end # for commit ~}}
 </ul>
 {{ end #if ~}}
