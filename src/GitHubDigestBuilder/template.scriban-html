@@ -125,7 +125,7 @@ a:hover, a:focus { text-decoration: none }
 {{ else if event.kind == 'opened' ~}}
 <li class="text-truncate">{{ event.actor | user_link }} opened pull request</li>
 {{ if !pull_request.body.empty? ~}}
-<li class="text-truncate">{{ event.actor | user_link }} <a href="{{ web_base }}/{{ pull_request.repo.name }}/pull/{{ pull_request.number }}" class="text-secondary">&#x21D2;</a> {{ pull_request.body | html.escape }}</li>
+<li class="text-truncate">{{ event.actor | user_link }} <a href="{{ pull_request.url }}" class="text-secondary">&#x21D2;</a> {{ pull_request.body | html.escape }}</li>
 {{ end # if ~}}
 {{ else if event.kind == 'reopened' ~}}
 <li class="text-truncate">{{ event.actor | user_link }} reopened pull request</li>
@@ -253,7 +253,7 @@ a:hover, a:focus { text-decoration: none }
 {{ if event.kind == 'opened' ~}}
 <li class="text-truncate">{{ event.actor | user_link }} opened issue</li>
 {{ if !issue.body.empty? ~}}
-<li class="text-truncate">{{ event.actor | user_link }} <a href="{{ web_base }}/{{ issue.repo.name }}/pull/{{ issue.number }}" class="text-secondary">&#x21D2;</a> {{ issue.body | html.escape }}</li>
+<li class="text-truncate">{{ event.actor | user_link }} <a href="{{ issue.url }}" class="text-secondary">&#x21D2;</a> {{ issue.body | html.escape }}</li>
 {{ end # if ~}}
 {{ else if event.kind == 'closed' ~}}
 <li class="text-truncate">{{ event.actor | user_link }} closed issue</li>

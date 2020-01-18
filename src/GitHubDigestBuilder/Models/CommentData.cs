@@ -17,21 +17,13 @@ namespace GitHubDigestBuilder.Models
 			get
 			{
 				if (Conversation!.Commit is CommentedCommitData commit)
-				{
-					return $"{commit.Repo!.Report!.WebBase}/{commit.Repo.Name}/commit/{commit.Sha}#{(Conversation.FilePath == null ? "commitcomment-" : "r")}{CommentId}";
-				}
+					return $"{commit.Url}#{(Conversation.FilePath == null ? "commitcomment-" : "r")}{CommentId}";
 				else if (Conversation.PullRequest is PullRequestData pullRequest)
-				{
-					return $"{pullRequest.Repo!.Report!.WebBase}/{pullRequest.Repo.Name}/pull/{pullRequest.Number}#{(Conversation.FilePath == null ? "issuecomment-" : "discussion_r")}{CommentId}";
-				}
+					return $"{pullRequest.Url}#{(Conversation.FilePath == null ? "issuecomment-" : "discussion_r")}{CommentId}";
 				else if (Conversation.Issue is IssueData issue)
-				{
-					return $"{issue.Repo!.Report!.WebBase}/{issue.Repo.Name}/pull/{issue.Number}#{(Conversation.FilePath == null ? "issuecomment-" : "discussion_r")}{CommentId}";
-				}
+					return $"{issue.Url}#{(Conversation.FilePath == null ? "issuecomment-" : "discussion_r")}{CommentId}";
 				else
-				{
 					throw new InvalidOperationException();
-				}
 			}
 		}
 	}
