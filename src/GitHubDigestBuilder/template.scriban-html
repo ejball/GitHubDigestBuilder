@@ -21,7 +21,7 @@ a:hover, a:focus { text-decoration: none }
 {{- end # func ~}}
 
 {{- func branch_link -}}
-<a href="{{ $0.url }}">{{ $0.name | html.escape }}</a>
+{{ if $0 }}<a href="{{ $0.url }}">{{ $0.name | html.escape }}</a>{{ else }}(no branch){{ end }}
 {{- end # func ~}}
 
 {{- func full_branch_link -}}
