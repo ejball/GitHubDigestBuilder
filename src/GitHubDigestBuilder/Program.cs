@@ -936,7 +936,7 @@ namespace GitHubDigestBuilder
 					else if (eventType == "IssuesApiEvent")
 					{
 						var action = payload.GetProperty("event").GetString();
-						if (action != "mentioned" && action != "subscribed" && action != "head_ref_deleted")
+						if (action != "mentioned" && action != "subscribed" && action != "head_ref_deleted" && action != "referenced")
 						{
 							var issueElement = payload.GetProperty("issue");
 							var number = issueElement.GetProperty("number").GetInt32();
@@ -1035,21 +1035,6 @@ namespace GitHubDigestBuilder
 							.ToList())
 						{
 							pullRequest.Events.Remove(redundantCloseEvent);
-						}
-
-						// remove reference to pull request in merge commit
-						var mergeCommit = pullRequest.Events
-							.OfType<PullRequestEventData>()
-							.Where(x => x.Kind == "merged" && x.Commit != null)
-							.Select(x => x.Commit)
-							.FirstOrDefault();
-						if (mergeCommit != null)
-						{
-							var mergeReference = pullRequest.Events
-								.OfType<PullRequestEventData>()
-								.FirstOrDefault(x => x.Kind == "referenced" && x.Commit?.Sha == mergeCommit.Sha);
-							if (mergeReference != null)
-								pullRequest.Events.Remove(mergeReference);
 						}
 					}
 

@@ -165,8 +165,6 @@ a:hover, a:focus { text-decoration: none }
 <li class="text-truncate">{{ event.actor | user_link }} force-pushed</li>
 {{ else if event.kind == 'base_ref_changed' ~}}
 <li class="text-truncate">{{ event.actor | user_link }} changed the target branch</li>
-{{ else if event.kind == 'referenced' ~}}
-<li class="text-truncate">{{ event.actor | user_link }} referenced pull request in {{ event.commit | commit_link }}</li>
 {{ else if event.kind == 'labeled' ~}}
 <li class="text-truncate">{{ event.actor | user_link }} added label: <i>{{ event.label_name | html.escape }}</i></li>
 {{ else if event.kind == 'unlabeled' ~}}
