@@ -138,7 +138,7 @@ a:hover, a:focus { text-decoration: none }
 {{ else if event.kind == 'ready_for_review' ~}}
 <li class="text-truncate">{{ event.actor | user_link }} marked pull request as ready for review</li>
 {{ else if event.kind == 'merged' ~}}
-<li class="text-truncate">{{ event.actor | user_link }} merged pull request into {{ pull_request.to_branch | branch_link }}{{ if event.commit }} via {{ event.commit | commit_link }}{{ end }}</li>
+<li class="text-truncate">{{ event.actor | user_link }} merged pull request{{ if pull_request.to_branch }} into {{ pull_request.to_branch | branch_link }}{{ end }}{{ if event.commit }} via {{ event.commit | commit_link }}{{ end }}</li>
 {{ else if event.kind == 'closed' ~}}
 <li class="text-truncate">{{ event.actor | user_link }} closed pull request {{ if event.commit }}via {{ event.commit | commit_link }}{{ end }}</li>
 {{ else if event.kind == 'comment-created' ~}}

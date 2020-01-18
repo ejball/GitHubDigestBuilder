@@ -796,7 +796,16 @@ namespace GitHubDigestBuilder
 
 						if (eventType == "PullRequestEvent" && action == "closed")
 						{
-							addPullRequestEvent(pullRequest, pullRequestElement.GetProperty("merged").GetBoolean() ? "merged" : "closed");
+							var eventData = addPullRequestEvent(pullRequest, pullRequestElement.GetProperty("merged").GetBoolean() ? "merged" : "closed");
+
+							if (pullRequestElement.TryGetProperty("merge_commit_sha")?.GetString() is string commitId)
+							{
+								eventData.Commit = new CommitData
+								{
+									Repo = createRepo(repoName),
+									Sha = commitId,
+								};
+							}
 						}
 						else if (eventType == "PullRequestReviewCommentEvent" && action == "created")
 						{
