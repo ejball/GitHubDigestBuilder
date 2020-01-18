@@ -561,7 +561,8 @@ namespace GitHubDigestBuilder
 					{
 						const string branchRefPrefix = "refs/heads/";
 						var refName = payload.TryGetProperty("ref")?.GetString();
-						if (refName?.StartsWith(branchRefPrefix, StringComparison.Ordinal) == true)
+						var commitCount = payload.TryGetProperty("size")?.GetInt32() ?? 0;
+						if (refName?.StartsWith(branchRefPrefix, StringComparison.Ordinal) == true && commitCount > 0)
 						{
 							var branchName = refName.Substring(branchRefPrefix.Length);
 
@@ -582,7 +583,6 @@ namespace GitHubDigestBuilder
 
 								var beforeSha = payload.TryGetProperty("before")?.GetString();
 								var afterSha = payload.TryGetProperty("head")?.GetString();
-								var commitCount = payload.TryGetProperty("size")?.GetInt32() ?? 0;
 								var distinctCommitCount = payload.TryGetProperty("distinct_size")?.GetInt32() ?? 0;
 								var commits = payload.TryGetProperty("commits")?.EnumerateArray().ToList() ?? new List<JsonElement>();
 								var canMerge = commitCount == commits.Count;
