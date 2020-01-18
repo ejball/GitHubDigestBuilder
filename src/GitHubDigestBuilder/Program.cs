@@ -600,7 +600,11 @@ namespace GitHubDigestBuilder
 						const string branchRefPrefix = "refs/heads/";
 						var refName = payload.TryGetProperty("ref")?.GetString();
 						var commitCount = payload.TryGetProperty("size")?.GetInt32() ?? 0;
-						if (refName?.StartsWith(branchRefPrefix, StringComparison.Ordinal) == true && commitCount > 0)
+						if (refName == null || !refName.StartsWith(branchRefPrefix, StringComparison.Ordinal))
+						{
+							addWarning($"Ignoring PushEvent to {refName} of {repoName}.");
+						}
+						else if (commitCount > 0)
 						{
 							var branchName = refName.Substring(branchRefPrefix.Length);
 
@@ -671,10 +675,6 @@ namespace GitHubDigestBuilder
 									});
 								}
 							}
-						}
-						else
-						{
-							addWarning($"Ignoring PushEvent to {refName} of {repoName}.");
 						}
 					}
 					else if (eventType == "CreateEvent")
