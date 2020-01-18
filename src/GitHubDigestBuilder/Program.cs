@@ -515,6 +515,44 @@ namespace GitHubDigestBuilder
 						return issue;
 					}
 
+					void setIssueBaseProperties(IssueBaseData data, JsonElement element)
+					{
+						var title = element.GetProperty("title").GetString();
+						if (title != null)
+							data.Title = title;
+
+						var body = element.GetProperty("body").GetString();
+						if (body != null)
+							data.Body = body;
+					}
+
+					void setIssueBaseEventProperties(IssueBaseEventData eventData, JsonElement payloadElement)
+					{
+						if ((payloadElement.TryGetProperty("review_requester", "login")?.GetString() ??
+							payloadElement.TryGetProperty("assigner", "login")?.GetString()) is string sourceUserName)
+						{
+							eventData.SourceUser = createUser(sourceUserName);
+						}
+
+						if ((payloadElement.TryGetProperty("requested_reviewer", "login")?.GetString() ??
+							payloadElement.TryGetProperty("assignee", "login")?.GetString()) is string targetUserName)
+						{
+							eventData.TargetUser = createUser(targetUserName);
+						}
+
+						if (payloadElement.TryGetProperty("requested_team", "html_url")?.GetString() is string targetTeamUrl)
+							eventData.TargetTeam = createTeam(targetTeamUrl);
+
+						if (payloadElement.TryGetProperty("label", "name")?.GetString() is string labelName)
+							eventData.LabelName = labelName;
+
+						if (payloadElement.TryGetProperty("rename", "from")?.GetString() is string renameFrom)
+							eventData.RenameFrom = renameFrom;
+
+						if (payloadElement.TryGetProperty("rename", "to")?.GetString() is string renameTo)
+							eventData.RenameTo = renameTo;
+					}
+
 					PullRequestEventData addPullRequestEvent(PullRequestData pullRequest, string kind)
 					{
 						var eventData = new PullRequestEventData
@@ -786,13 +824,7 @@ namespace GitHubDigestBuilder
 							Repo = createRepo(pullRequestElement.GetProperty("base", "repo", "full_name").GetString()),
 						};
 
-						var title = pullRequestElement.GetProperty("title").GetString();
-						if (title != null)
-							pullRequest.Title = title;
-
-						var body = pullRequestElement.GetProperty("body").GetString();
-						if (body != null)
-							pullRequest.Body = body;
+						setIssueBaseProperties(pullRequest, pullRequestElement);
 
 						if (eventType == "PullRequestEvent" && action == "closed")
 						{
@@ -844,15 +876,9 @@ namespace GitHubDigestBuilder
 						var action = payload.GetProperty("action").GetString();
 						var issueElement = payload.GetProperty("issue");
 						var number = issueElement.GetProperty("number").GetInt32();
+
 						var issue = getOrAddIssue(number);
-
-						var title = issueElement.GetProperty("title").GetString();
-						if (title != null)
-							issue.Title = title;
-
-						var body = issueElement.GetProperty("body").GetString();
-						if (body != null)
-							issue.Body = body;
+						setIssueBaseProperties(issue, issueElement);
 
 						addIssueEvent(issue, action);
 					}
@@ -944,31 +970,10 @@ namespace GitHubDigestBuilder
 							if (issueElement.TryGetProperty("pull_request") != null)
 							{
 								var pullRequest = getOrAddPullRequest(number);
-
-								var title = issueElement.GetProperty("title").GetString();
-								if (title != null)
-									pullRequest.Title = title;
-
-								var body = issueElement.GetProperty("body").GetString();
-								if (body != null)
-									pullRequest.Body = body;
+								setIssueBaseProperties(pullRequest, issueElement);
 
 								var eventData = addPullRequestEvent(pullRequest, action);
-
-								if ((payload.TryGetProperty("review_requester", "login")?.GetString() ??
-									payload.TryGetProperty("assigner", "login")?.GetString()) is string sourceUserName)
-								{
-									eventData.SourceUser = createUser(sourceUserName);
-								}
-
-								if ((payload.TryGetProperty("requested_reviewer", "login")?.GetString() ??
-									payload.TryGetProperty("assignee", "login")?.GetString()) is string targetUserName)
-								{
-									eventData.TargetUser = createUser(targetUserName);
-								}
-
-								if (payload.TryGetProperty("requested_team", "html_url")?.GetString() is string targetTeamUrl)
-									eventData.TargetTeam = createTeam(targetTeamUrl);
+								setIssueBaseEventProperties(eventData, payload);
 
 								if (payload.TryGetProperty("commit_id")?.GetString() is string commitId)
 								{
@@ -978,29 +983,14 @@ namespace GitHubDigestBuilder
 										Sha = commitId,
 									};
 								}
-
-								if (payload.TryGetProperty("label", "name")?.GetString() is string labelName)
-									eventData.LabelName = labelName;
-
-								if (payload.TryGetProperty("rename", "from")?.GetString() is string renameFrom)
-									eventData.RenameFrom = renameFrom;
-
-								if (payload.TryGetProperty("rename", "to")?.GetString() is string renameTo)
-									eventData.RenameTo = renameTo;
 							}
 							else
 							{
 								var issue = getOrAddIssue(number);
+								setIssueBaseProperties(issue, issueElement);
 
-								var title = issueElement.GetProperty("title").GetString();
-								if (title != null)
-									issue.Title = title;
-
-								var body = issueElement.GetProperty("body").GetString();
-								if (body != null)
-									issue.Body = body;
-
-								addIssueEvent(issue, action);
+								var eventData = addIssueEvent(issue, action);
+								setIssueBaseEventProperties(eventData, payload);
 							}
 						}
 					}

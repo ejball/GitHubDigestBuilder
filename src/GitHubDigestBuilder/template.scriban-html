@@ -265,6 +265,14 @@ a:hover, a:focus { text-decoration: none }
 {{ for comment in event.conversation.comments ~}}
 <li class="text-truncate">{{ comment.actor | user_link }} {{ start_link comment.url "text-secondary" }}&#x21D2;</a> {{ comment.body | html.escape }}</li>
 {{ end # for comment ~}}
+{{ else if event.kind == 'assigned' ~}}
+<li class="text-truncate">{{ event.source_user | user_link }} assigned issue to {{ event.target_user | user_link }}</li>
+{{ else if event.kind == 'unassigned' ~}}
+<li class="text-truncate">{{ event.source_user | user_link }} unassigned issue from {{ event.target_user | user_link }}</li>
+{{ else if event.kind == 'labeled' ~}}
+<li class="text-truncate">{{ event.actor | user_link }} added label: <i>{{ event.label_name | html.escape }}</i></li>
+{{ else if event.kind == 'unlabeled' ~}}
+<li class="text-truncate">{{ event.actor | user_link }} removed label: <i>{{ event.label_name | html.escape }}</i></li>
 {{ else ~}}
 <li class="text-truncate">{{ event.actor | user_link }} <code>{{ event.kind }}</code></li>
 {{ end # if event.kind ~}}

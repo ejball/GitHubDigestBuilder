@@ -1,7 +1,6 @@
 namespace GitHubDigestBuilder.Models
 {
-	internal sealed class IssueEventData : EventData
+	internal sealed class IssueEventData : IssueBaseEventData
 	{
-		public ConversationData? Conversation { get; set; }
 	}
 }
