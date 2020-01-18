@@ -52,6 +52,9 @@ namespace GitHubDigestBuilder
 			var startDateTimeUtc = new DateTimeOffset(date.Year, date.Month, date.Day, 0, 0, 0, timeZoneOffset).UtcDateTime;
 			var endDateTimeUtc = startDateTimeUtc.AddDays(1.0);
 
+			// determine culture
+			var culture = settings.Culture == null ? CultureInfo.CurrentCulture : CultureInfo.GetCultureInfo(settings.Culture);
+
 			// determine output file
 			var outputFile = Path.Combine(configFileDirectory, settings.OutputDirectory ?? ".", $"{dateIso}.html");
 			Directory.CreateDirectory(Path.GetDirectoryName(outputFile));
@@ -76,6 +79,9 @@ namespace GitHubDigestBuilder
 
 				// don't process the same event twice
 				var handledEventIds = new HashSet<string>();
+
+				// stop when rate limited
+				var rateLimitResetUtc = default(DateTime?);
 
 				async Task<PagedDownloadResult> loadPagesAsync(string url, string[] accepts, int maxPageCount, Func<JsonElement, bool>? isLastPage = null)
 				{
@@ -104,6 +110,9 @@ namespace GitHubDigestBuilder
 							etag = cacheElement.GetProperty("etag").GetString();
 					}
 
+					if (rateLimitResetUtc is object)
+						return new PagedDownloadResult(DownloadStatus.RateLimited, rateLimitResetUtc: rateLimitResetUtc.Value);
+
 					var status = DownloadStatus.TooMuchActivity;
 					var items = new List<JsonElement>();
 
@@ -128,6 +137,23 @@ namespace GitHubDigestBuilder
 
 						if (response.StatusCode == HttpStatusCode.NotFound)
 							return new PagedDownloadResult(DownloadStatus.NotFound);
+
+						if (response.StatusCode == HttpStatusCode.Forbidden &&
+							response.Headers.TryGetValues("X-RateLimit-Remaining", out var rateLimitRemainingValues) &&
+							rateLimitRemainingValues.FirstOrDefault() == "0" &&
+							response.Headers.TryGetValues("X-RateLimit-Reset", out var rateLimitResetValues) &&
+							int.TryParse(rateLimitResetValues.FirstOrDefault() ?? "", out var resetEpochSeconds))
+						{
+							rateLimitResetUtc = DateTime.UnixEpoch.AddSeconds(resetEpochSeconds);
+
+							var message = "GitHub API rate limit exceeded. " +
+								$"Try again at {new DateTimeOffset(rateLimitResetUtc.Value).ToOffset(timeZoneOffset).ToString("f", culture)}.";
+							if (authToken is null)
+								message += " Specify a GitHub personal access token for a much higher rate limit.";
+							addWarning(message);
+
+							return new PagedDownloadResult(DownloadStatus.RateLimited, rateLimitResetUtc: rateLimitResetUtc);
+						}
 
 						if (response.StatusCode != HttpStatusCode.OK)
 							throw new InvalidOperationException($"Unexpected status code: {response.StatusCode}");
@@ -1045,8 +1071,6 @@ namespace GitHubDigestBuilder
 					replaceList(repo.Issues, repo.Issues.OrderBy(x => x.Number));
 				}
 
-				var culture = settings.Culture == null ? CultureInfo.CurrentCulture : CultureInfo.GetCultureInfo(settings.Culture);
-
 				var templateText = GetEmbeddedResourceText("GitHubDigestBuilder.template.scriban-html");
 				var template = Template.Parse(templateText);
 
@@ -1130,19 +1154,23 @@ namespace GitHubDigestBuilder
 			Success,
 			NotFound,
 			TooMuchActivity,
+			RateLimited,
 		}
 
 		private sealed class PagedDownloadResult
 		{
-			public PagedDownloadResult(DownloadStatus status, IReadOnlyList<JsonElement>? elements = null)
+			public PagedDownloadResult(DownloadStatus status, IReadOnlyList<JsonElement>? elements = null, DateTime? rateLimitResetUtc = null)
 			{
 				Status = status;
 				Elements = elements ?? Array.Empty<JsonElement>();
+				RateLimitResetUtc = rateLimitResetUtc;
 			}
 
 			public DownloadStatus Status { get; }
 
 			public IReadOnlyList<JsonElement> Elements { get; }
+
+			public DateTime? RateLimitResetUtc { get; }
 		}
 	}
 }
