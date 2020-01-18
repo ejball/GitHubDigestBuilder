@@ -16,40 +16,44 @@ a:hover, a:focus { text-decoration: none }
 <div class="row">
 <div class="col-sm-9">
 
+{{- func start_link -}}
+<a href="{{ $0 }}" target="_blank" {{ if $1 }} class="{{ $1 }}"{{ end }}>
+{{- end # func ~}}
+
 {{- func repo_link -}}
-<a href="{{ $0.url }}">{{ $0.name | html.escape }}</a>
+{{ start_link $0.url }}{{ $0.name | html.escape }}</a>
 {{- end # func ~}}
 
 {{- func branch_link -}}
-{{ if $0 }}<a href="{{ $0.url }}">{{ $0.name | html.escape }}</a>{{ else }}(no branch){{ end }}
+{{ if $0 }}{{ start_link $0.url }}{{ $0.name | html.escape }}</a>{{ else }}(no branch){{ end }}
 {{- end # func ~}}
 
 {{- func full_branch_link -}}
-<a href="{{ $0.url }}">{{ $0.repo.org | html.escape }}:{{ $0.name | html.escape }}</a>
+{{ start_link $0.url }}{{ $0.repo.org | html.escape }}:{{ $0.name | html.escape }}</a>
 {{- end # func ~}}
 
 {{- func pull_request_link -}}
-<a href="{{ $0.url }}">#{{ $0.number }}</a>
+{{ start_link $0.url }}#{{ $0.number }}</a>
 {{- end # func ~}}
 
 {{- func issue_link -}}
-<a href="{{ $0.url }}">#{{ $0.number }}</a>
+{{ start_link $0.url }}#{{ $0.number }}</a>
 {{- end # func ~}}
 
 {{- func tag_link -}}
-<a href="{{ $0.url }}">{{ $0.name | html.escape }}</a>
+{{ start_link $0.url }}{{ $0.name | html.escape }}</a>
 {{- end # func ~}}
 
 {{- func wiki_link -}}
-<a href="{{ $0.url }}">{{ $0.page_title | html.escape }}</a>
+{{ start_link $0.url }}{{ $0.page_title | html.escape }}</a>
 {{- end # func ~}}
 
 {{- func user_link -}}
-{{ if $0 }}<a href="{{ $0.url }}" class="text-body font-weight-bold">{{ $0.name | html.escape }}</a>{{ else }}(no user){{ end }}
+{{ if $0 }}{{ start_link $0.url "text-body font-weight-bold" }}{{ $0.name | html.escape }}</a>{{ else }}(no user){{ end }}
 {{- end # func ~}}
 
 {{- func team_link -}}
-{{ if $0 }}<a href="{{ $0.url }}" class="text-body font-weight-bold">{{ $0.org | html.escape }}/{{ $0.name | html.escape }}</a>{{ else }}(no team){{ end }}
+{{ if $0 }}{{ start_link $0.url "text-body font-weight-bold" }}{{ $0.org | html.escape }}/{{ $0.name | html.escape }}</a>{{ else }}(no team){{ end }}
 {{- end # func ~}}
 
 {{- func commits_text -}}
@@ -57,7 +61,7 @@ a:hover, a:focus { text-decoration: none }
 {{- end # func ~}}
 
 {{- func commits_link -}}
-<a href="{{ $0.url }}">
+{{ start_link $0.url }}
 {{- if $0.commit_count >= 100 -}}
 100+ commits</a>
 {{- else if $0.commit_count == $0.new_commit_count -}}
@@ -68,7 +72,7 @@ a:hover, a:focus { text-decoration: none }
 {{- end # func ~}}
 
 {{- func commit_link -}}
-<a href="{{ $0.url }}"><code>{{ $0.sha | string.slice 0 7 }}</code></a>
+{{ start_link $0.url }}<code>{{ $0.sha | string.slice 0 7 }}</code></a>
 {{- end # func ~}}
 
 {{- func previous_next_links ~}}
@@ -125,7 +129,7 @@ a:hover, a:focus { text-decoration: none }
 {{ else if event.kind == 'opened' ~}}
 <li class="text-truncate">{{ event.actor | user_link }} opened pull request</li>
 {{ if !pull_request.body.empty? ~}}
-<li class="text-truncate">{{ event.actor | user_link }} <a href="{{ pull_request.url }}" class="text-secondary">&#x21D2;</a> {{ pull_request.body | html.escape }}</li>
+<li class="text-truncate">{{ event.actor | user_link }} {{ start_link pull_request.url "text-secondary" }}&#x21D2;</a> {{ pull_request.body | html.escape }}</li>
 {{ end # if ~}}
 {{ else if event.kind == 'reopened' ~}}
 <li class="text-truncate">{{ event.actor | user_link }} reopened pull request</li>
@@ -143,13 +147,13 @@ a:hover, a:focus { text-decoration: none }
 <li class="text-truncate">{{ event.actor | user_link }} closed pull request {{ if event.commit }}via {{ event.commit | commit_link }}{{ end }}</li>
 {{ else if event.kind == 'comment-created' ~}}
 {{ for comment in event.conversation.comments ~}}
-<li class="text-truncate">{{ comment.actor | user_link }} <a href="{{ comment.url }}" class="text-secondary">&#x21D2;</a> {{ comment.body | html.escape }}</li>
+<li class="text-truncate">{{ comment.actor | user_link }} {{ start_link comment.url "text-secondary" }}&#x21D2;</a> {{ comment.body | html.escape }}</li>
 {{ end # for comment ~}}
 {{ else if event.kind == 'review-comment-created' ~}}
-<li class="text-truncate"><a href="{{ event.conversation.comments[0].url }}"><code>{{ event.conversation.file_path | html.escape }}</code></a>
+<li class="text-truncate">{{ start_link event.conversation.comments[0].url }}<code>{{ event.conversation.file_path | html.escape }}</code></a>
 <ul class="list-unstyled ml-4">
 {{ for comment in event.conversation.comments ~}}
-<li class="text-truncate">{{ comment.actor | user_link }} <a href="{{ comment.url }}" class="text-secondary">&#x21D2;</a> {{ comment.body | html.escape }}</li>
+<li class="text-truncate">{{ comment.actor | user_link }} {{ start_link comment.url "text-secondary" }}&#x21D2;</a> {{ comment.body | html.escape }}</li>
 {{ end # for comment ~}}
 </ul>
 </li>
@@ -200,11 +204,11 @@ a:hover, a:focus { text-decoration: none }
 <ul class="list-unstyled ml-4">
 {{ for conversation in commit.conversations ~}}
 {{ if conversation.file_path ~}}
-<li class="text-truncate"><a href="{{ conversation.comments[0].url }}"><code>{{ conversation.file_path | html.escape }}</code></a>
+<li class="text-truncate">{{ start_link conversation.comments[0].url }}<code>{{ conversation.file_path | html.escape }}</code></a>
 <ul class="list-unstyled ml-4">
 {{ end # if }}
 {{ for comment in conversation.comments ~}}
-<li class="text-truncate">{{ comment.actor | user_link }} <a href="{{ comment.url }}" class="text-secondary">&#x21D2;</a> {{ comment.body | html.escape }}</li>
+<li class="text-truncate">{{ comment.actor | user_link }} {{ start_link comment.url "text-secondary" }}&#x21D2;</a> {{ comment.body | html.escape }}</li>
 {{ end # for comment ~}}
 {{ if conversation.file_path ~}}
 </ul>
@@ -253,13 +257,13 @@ a:hover, a:focus { text-decoration: none }
 {{ if event.kind == 'opened' ~}}
 <li class="text-truncate">{{ event.actor | user_link }} opened issue</li>
 {{ if !issue.body.empty? ~}}
-<li class="text-truncate">{{ event.actor | user_link }} <a href="{{ issue.url }}" class="text-secondary">&#x21D2;</a> {{ issue.body | html.escape }}</li>
+<li class="text-truncate">{{ event.actor | user_link }} {{ start_link issue.url "text-secondary" }}&#x21D2;</a> {{ issue.body | html.escape }}</li>
 {{ end # if ~}}
 {{ else if event.kind == 'closed' ~}}
 <li class="text-truncate">{{ event.actor | user_link }} closed issue</li>
 {{ else if event.kind == 'comment-created' ~}}
 {{ for comment in event.conversation.comments ~}}
-<li class="text-truncate">{{ comment.actor | user_link }} <a href="{{ comment.url }}" class="text-secondary">&#x21D2;</a> {{ comment.body | html.escape }}</li>
+<li class="text-truncate">{{ comment.actor | user_link }} {{ start_link comment.url "text-secondary" }}&#x21D2;</a> {{ comment.body | html.escape }}</li>
 {{ end # for comment ~}}
 {{ else ~}}
 <li class="text-truncate">{{ event.actor | user_link }} <code>{{ event.kind }}</code></li>
@@ -273,7 +277,7 @@ a:hover, a:focus { text-decoration: none }
 
 {{ end # for repo ~}}
 
-<p class="small font-italic mt-1">generated by <a href="https://github.com/ejball/GitHubDigestBuilder">GitHubDigestBuilder</a> on {{ now | format 'f' | html.escape }}</p>
+<p class="small font-italic mt-1">generated by {{ start_link "https://github.com/ejball/GitHubDigestBuilder" }}GitHubDigestBuilder</a> on {{ now | format 'f' | html.escape }}</p>
 
 {{ previous_next_links }}
 
