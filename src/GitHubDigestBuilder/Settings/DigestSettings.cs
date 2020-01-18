@@ -17,5 +17,7 @@ namespace GitHubDigestBuilder.Settings
 		public double? TimeZoneOffsetHours { get; set; }
 
 		public string? Culture { get; set; }
+
+		public string? CacheDirectory { get; set; }
 	}
 }

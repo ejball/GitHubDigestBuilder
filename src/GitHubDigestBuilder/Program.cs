@@ -70,8 +70,8 @@ namespace GitHubDigestBuilder
 				const int cacheVersion = 2;
 
 				using var sha1 = SHA1.Create();
-				var cacheDirectory = Path.Combine(Path.GetTempPath(), "GitHubDigestBuilderCache",
-					BitConverter.ToString(sha1.ComputeHash(Encoding.UTF8.GetBytes($"{cacheVersion} {apiBase} {authToken}"))).Replace("-", "")[..16]);
+				var cacheDirectory = settings.CacheDirectory != null ? Path.GetFullPath(settings.CacheDirectory) : Path.Combine(Path.GetTempPath(), "GitHubDigestBuilderCache");
+				cacheDirectory = Path.Combine(cacheDirectory, BitConverter.ToString(sha1.ComputeHash(Encoding.UTF8.GetBytes($"{cacheVersion} {apiBase} {authToken}"))).Replace("-", "")[..16]);
 				Directory.CreateDirectory(cacheDirectory);
 
 				// don't process the same event twice
