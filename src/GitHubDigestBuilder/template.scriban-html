@@ -103,6 +103,18 @@ a:hover, a:focus { text-decoration: none }
 
 <div class="ml-4">
 
+{{ if !repo.repo_events.empty? ~}}
+<ul class="list-unstyled">
+{{ for event in repo.repo_events ~}}
+{{ if event.kind == 'create-repo' }}
+<li class="text-truncate">{{ event.actor | user_link }} created repository</li>
+{{ else ~}}
+<li class="text-truncate">{{ event.actor | user_link }} <code>{{ event.kind }}</code></li>
+{{ end # if event.kind ~}}
+{{ end # for event ~}}
+</ul>
+{{ end # if ~}}
+
 {{ for pull_request in repo.pull_requests ~}}
 <h5 class="text-truncate" id="{{ repo.name | string.handleize }}-{{ pull_request.number }}" data-toc-text="PR #{{ pull_request.number }}"><small class="text-muted">PR</small> {{ pull_request | pull_request_link }} <small class="text-muted">{{ pull_request.title | html.escape }}</small></h5>
 {{ if !pull_request.events.empty? ~}}

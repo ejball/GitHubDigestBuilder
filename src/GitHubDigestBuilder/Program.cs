@@ -696,6 +696,19 @@ namespace GitHubDigestBuilder
 								});
 							}
 						}
+						else if (refType == "repository")
+						{
+							if (!rawEvent.IsNetwork)
+							{
+								var repo = getOrAddRepo();
+								repo.RepoEvents.Add(new RepoEventData
+								{
+									Kind = "create-repo",
+									Repo = repo,
+									Actor = actor,
+								});
+							}
+						}
 						else
 						{
 							addWarning($"CreateEvent ref type {refType} not supported to {repoName}.");
