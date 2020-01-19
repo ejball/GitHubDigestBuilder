@@ -6,6 +6,6 @@ namespace GitHubDigestBuilder.Models
 
 		public RepoData? Repo { get; set; }
 
-		public string Url => $"{Repo!.Url}/tree/{Name}";
+		public string Url => $"{Repo!.Url}/releases/tag/{Name}";
 	}
 }
