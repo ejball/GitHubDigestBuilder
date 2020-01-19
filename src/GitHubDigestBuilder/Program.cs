@@ -36,7 +36,7 @@ namespace GitHubDigestBuilder
 
 			// find config file
 			if (configFilePath == null)
-				throw new ApplicationException("Missing configuration file.");
+				throw new ApplicationException(GetUsage());
 			configFilePath = Path.GetFullPath(configFilePath);
 			if (!File.Exists(configFilePath))
 				throw new ApplicationException("Configuration file not found.");
@@ -1201,6 +1201,20 @@ namespace GitHubDigestBuilder
 			var deserializer = new DeserializerBuilder().Build();
 			var serializer = new SerializerBuilder().JsonCompatible().Build();
 			return serializer.Serialize(deserializer.Deserialize(new StringReader(yaml))!);
+		}
+
+		private static string GetUsage()
+		{
+			return string.Join(Environment.NewLine, new[]
+			{
+				"Usage: GitHubDigestBuilder config-file [options]",
+				"Options:",
+				"  --auth <github-personal-access-token>  (one for each GitHub)",
+				"  --date yyyy-MM-dd  (default: yesterday)",
+				"  --quiet  (no console output)",
+				"  --verbose  (show GitHub API usage)",
+				"Documentation: https://ejball.com/GitHubDigestBuilder/",
+			});
 		}
 
 		private enum DownloadStatus
