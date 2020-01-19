@@ -63,6 +63,14 @@ namespace GitHubDigestBuilder
 			if (github == null)
 				throw new ApplicationException("Configuration file must include github.");
 
+			// create report
+			var report = new ReportData
+			{
+				Date = date,
+				PreviousDate = date.AddDays(-1),
+				Now = now,
+			};
+
 			try
 			{
 				// prepare HTTP client
@@ -206,13 +214,6 @@ namespace GitHubDigestBuilder
 
 					return new PagedDownloadResult(status, items);
 				}
-
-				var report = new ReportData
-				{
-					Date = date,
-					PreviousDate = date.AddDays(-1),
-					Now = now,
-				};
 
 				void addWarning(string text)
 				{
@@ -489,6 +490,8 @@ namespace GitHubDigestBuilder
 					};
 				}
 
+				var repos = new List<RepoData>();
+
 				foreach (var rawEvent in rawEvents)
 				{
 					var repoName = rawEvent.RepoName!;
@@ -498,11 +501,11 @@ namespace GitHubDigestBuilder
 					{
 						actualRepoName ??= repoName;
 
-						var repo = report.Repos.SingleOrDefault(x => x.Name == actualRepoName);
+						var repo = repos.SingleOrDefault(x => x.Name == actualRepoName);
 						if (repo == null)
 						{
 							repo = createRepo(actualRepoName);
-							report.Repos.Add(repo);
+							repos.Add(repo);
 						}
 
 						return repo;
@@ -1054,11 +1057,9 @@ namespace GitHubDigestBuilder
 					list.AddRange(newList);
 				}
 
-				replaceList(report.Repos, report.Repos
+				foreach (var repo in repos
 					.OrderBy(x => sourceRepoIndices.TryGetValue(x.Name!, out var i) ? i : int.MaxValue)
-					.ThenBy(x => x.Name, StringComparer.InvariantCulture));
-
-				foreach (var repo in report.Repos)
+					.ThenBy(x => x.Name, StringComparer.InvariantCulture))
 				{
 					foreach (var pullRequest in repo.PullRequests)
 					{
@@ -1090,6 +1091,8 @@ namespace GitHubDigestBuilder
 
 					replaceList(repo.PullRequests, repo.PullRequests.OrderBy(x => x.Number));
 					replaceList(repo.Issues, repo.Issues.OrderBy(x => x.Number));
+
+					report.Repos.Add(repo);
 				}
 
 				var templateText = GetEmbeddedResourceText("GitHubDigestBuilder.template.scriban-html");
