@@ -61,7 +61,7 @@ namespace GitHubDigestBuilder
 			// get GitHub settings
 			var github = settings.GitHub;
 			if (github == null)
-				throw new ApplicationException("Configuration file must specified at least one github.");
+				throw new ApplicationException("Configuration file must include github.");
 
 			try
 			{
