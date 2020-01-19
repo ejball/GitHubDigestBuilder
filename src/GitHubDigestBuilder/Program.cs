@@ -57,7 +57,11 @@ namespace GitHubDigestBuilder
 
 			// determine output file
 			var outputFile = Path.Combine(configFileDirectory, settings.OutputDirectory ?? ".", $"{dateIso}.html");
-			Directory.CreateDirectory(Path.GetDirectoryName(outputFile));
+
+			// get GitHub settings
+			var github = settings.GitHub;
+			if (github == null)
+				throw new ApplicationException("Configuration file must specified at least one github.");
 
 			try
 			{
@@ -65,13 +69,13 @@ namespace GitHubDigestBuilder
 				var httpClient = new HttpClient();
 				httpClient.DefaultRequestHeaders.UserAgent.Add(ProductInfoHeaderValue.Parse("GitHubDigestBuilder"));
 
-				authToken ??= settings.GitHub?.AuthToken;
+				authToken ??= github.AuthToken;
 				if (!string.IsNullOrWhiteSpace(authToken))
 					httpClient.DefaultRequestHeaders.Authorization = AuthenticationHeaderValue.Parse($"token {authToken}");
 
 				string webBase;
 				string apiBase;
-				if (settings.GitHub?.Enterprise is string enterprise)
+				if (github.Enterprise is string enterprise)
 				{
 					webBase = enterprise;
 					if (!webBase.StartsWith("http://", StringComparison.OrdinalIgnoreCase) && !webBase.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
@@ -255,8 +259,8 @@ namespace GitHubDigestBuilder
 						addWarning($"Failed to find repositories for {sourceName}.");
 				}
 
-				var settingsRepos = settings.GitHub?.Repos ?? new List<RepoSettings>();
-				var settingsUsers = settings.GitHub?.Users ?? new List<UserSettings>();
+				var settingsRepos = github.Repos ?? new List<RepoSettings>();
+				var settingsUsers = github.Users ?? new List<UserSettings>();
 				if (settingsRepos.Count == 0 && settingsUsers.Count == 0)
 					throw new ApplicationException("No repositories or users specified in configuration.");
 
@@ -298,7 +302,7 @@ namespace GitHubDigestBuilder
 				}
 
 				var usersToExclude = new HashSet<string>();
-				foreach (var exclude in settings.GitHub?.Excludes ?? new List<FilterSettings>())
+				foreach (var exclude in github.Excludes ?? new List<FilterSettings>())
 				{
 					switch (exclude)
 					{
@@ -1102,6 +1106,7 @@ namespace GitHubDigestBuilder
 
 				var reportHtml = template.Render(templateContext);
 
+				Directory.CreateDirectory(Path.GetDirectoryName(outputFile));
 				await File.WriteAllTextAsync(outputFile, reportHtml);
 			}
 			catch (Exception exception)
