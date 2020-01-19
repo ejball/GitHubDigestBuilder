@@ -149,7 +149,7 @@ namespace GitHubDigestBuilder
 						}
 
 						if (rateLimitResetUtc is object)
-							return new PagedDownloadResult(DownloadStatus.RateLimited, rateLimitResetUtc: rateLimitResetUtc.Value);
+							return new PagedDownloadResult(DownloadStatus.RateLimited);
 
 						var status = DownloadStatus.TooMuchActivity;
 						var items = new List<JsonElement>();
@@ -191,7 +191,7 @@ namespace GitHubDigestBuilder
 									message += " Specify a GitHub personal access token for a much higher rate limit.";
 								addWarning(message);
 
-								return new PagedDownloadResult(DownloadStatus.RateLimited, rateLimitResetUtc: rateLimitResetUtc);
+								return new PagedDownloadResult(DownloadStatus.RateLimited);
 							}
 
 							if (response.StatusCode == HttpStatusCode.Unauthorized)
@@ -1227,18 +1227,15 @@ namespace GitHubDigestBuilder
 
 		private sealed class PagedDownloadResult
 		{
-			public PagedDownloadResult(DownloadStatus status, IReadOnlyList<JsonElement>? elements = null, DateTime? rateLimitResetUtc = null)
+			public PagedDownloadResult(DownloadStatus status, IReadOnlyList<JsonElement>? elements = null)
 			{
 				Status = status;
 				Elements = elements ?? Array.Empty<JsonElement>();
-				RateLimitResetUtc = rateLimitResetUtc;
 			}
 
 			public DownloadStatus Status { get; }
 
 			public IReadOnlyList<JsonElement> Elements { get; }
-
-			public DateTime? RateLimitResetUtc { get; }
 		}
 	}
 }
