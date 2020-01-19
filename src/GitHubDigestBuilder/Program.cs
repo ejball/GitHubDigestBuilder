@@ -69,7 +69,21 @@ namespace GitHubDigestBuilder
 				if (!string.IsNullOrWhiteSpace(authToken))
 					httpClient.DefaultRequestHeaders.Authorization = AuthenticationHeaderValue.Parse($"token {authToken}");
 
-				var apiBase = (settings.GitHub?.ApiUrl ?? "https://api.github.com").TrimEnd('/');
+				string webBase;
+				string apiBase;
+				if (settings.GitHub?.Enterprise is string enterprise)
+				{
+					webBase = enterprise;
+					if (!webBase.StartsWith("http://", StringComparison.OrdinalIgnoreCase) && !webBase.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+						webBase = "https://" + webBase.TrimEnd('/');
+					apiBase = webBase + "/api/v3";
+				}
+				else
+				{
+					webBase = "https://github.com";
+					apiBase = "https://api.github.com";
+				}
+
 				const int cacheVersion = 2;
 
 				using var sha1 = SHA1.Create();
@@ -155,6 +169,9 @@ namespace GitHubDigestBuilder
 							return new PagedDownloadResult(DownloadStatus.RateLimited, rateLimitResetUtc: rateLimitResetUtc);
 						}
 
+						if (response.StatusCode == HttpStatusCode.Unauthorized)
+							throw new ApplicationException("GitHub API returned 401 Unauthorized. Ensure that your auth token is set to a valid personal access token.");
+
 						if (response.StatusCode != HttpStatusCode.OK)
 							throw new InvalidOperationException($"Unexpected status code: {response.StatusCode}");
 
@@ -185,8 +202,6 @@ namespace GitHubDigestBuilder
 
 					return new PagedDownloadResult(status, items);
 				}
-
-				var webBase = (settings.GitHub?.WebUrl ?? "https://github.com").TrimEnd('/');
 
 				var report = new ReportData
 				{
