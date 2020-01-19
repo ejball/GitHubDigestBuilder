@@ -32,7 +32,7 @@ Once installed, invoke GitHubDigestBuilder with the path to your configuration f
 
 The following command-line options are also supported:
 
-### --auth <github-personal-access-token>
+### `--auth`
 
 You can use this tool without a GitHub [personal access token](https://github.com/settings/tokens) (PAT), but the GitHub event API is extremely rate-limited without one. You can provide the PAT via the `--auth` command-line option or via the `auth` configuration field described later. The *public_repo* permission should be sufficient.
 
@@ -42,15 +42,23 @@ You can use this tool without a GitHub [personal access token](https://github.co
 
 If multiple `githubs` are provided in the configuration, add an `--auth` option for each one.
 
-### --verbose
+### `--verbose`
 
 If you want to see what GitHub APIs are being used, specify this option.
 
-### --quiet
+```
+> GitHubDigestBuilder digest.yaml --verbose
+```
+
+### `--quiet`
 
 The tool normally writes the path of the output file to the console; use this option to suppress that.
 
-### --date <yyyy-MM-dd>
+```
+> GitHubDigestBuilder digest.yaml --quiet
+```
+
+### `--date`
 
 Without this command-line option, the digest for yesterday is created. You can generate digests for older dates, but GitHub only provides access to the most recent events, so the tool is most reliable when generating a digest for yesterday, ideally early in the morning before much activity happens today.
 
