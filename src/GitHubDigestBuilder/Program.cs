@@ -240,7 +240,11 @@ namespace GitHubDigestBuilder
 						addWarning($"Failed to find repositories for {sourceName}.");
 				}
 
-				var settingsRepos = settings.Repos ?? new List<RepoSettings>();
+				var settingsRepos = settings.GitHub?.Repos ?? new List<RepoSettings>();
+				var settingsUsers = settings.GitHub?.Users ?? new List<UserSettings>();
+				if (settingsRepos.Count == 0 && settingsUsers.Count == 0)
+					throw new ApplicationException("No repositories or users specified in configuration.");
+
 				foreach (var (settingsRepo, sourceIndex) in settingsRepos.Select((x, i) => (x, i)))
 				{
 					switch (settingsRepo)
@@ -264,7 +268,6 @@ namespace GitHubDigestBuilder
 
 				var sourceUserNames = new List<string>();
 
-				var settingsUsers = settings.Users ?? new List<UserSettings>();
 				foreach (var settingsUser in settingsUsers)
 				{
 					switch (settingsUser)
@@ -280,7 +283,7 @@ namespace GitHubDigestBuilder
 				}
 
 				var usersToExclude = new HashSet<string>();
-				foreach (var exclude in settings.Excludes ?? new List<FilterSettings>())
+				foreach (var exclude in settings.GitHub?.Excludes ?? new List<FilterSettings>())
 				{
 					switch (exclude)
 					{
