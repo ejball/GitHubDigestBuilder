@@ -6,6 +6,6 @@ namespace GitHubDigestBuilder.Models
 
 		public string? PageTitle { get; set; }
 
-		public string Url => $"{Repo!.Report!.WebBase}/{Repo!.Name}/wiki/{PageName}";
+		public string Url => $"{Repo!.Url}/wiki/{PageName}";
 	}
 }

@@ -211,7 +211,6 @@ namespace GitHubDigestBuilder
 				{
 					Date = date,
 					PreviousDate = date.AddDays(-1),
-					WebBase = webBase,
 					Now = now,
 				};
 
@@ -468,14 +467,14 @@ namespace GitHubDigestBuilder
 				RepoData createRepo(string name) =>
 					new RepoData
 					{
-						Report = report,
+						WebBase = webBase,
 						Name = name,
 					};
 
 				UserData createUser(string name) =>
 					new UserData
 					{
-						Report = report,
+						WebBase = webBase,
 						Name = name,
 					};
 
@@ -484,7 +483,7 @@ namespace GitHubDigestBuilder
 					var match = Regex.Match(url, @"/orgs/([^/]+)/teams/([^/]+)$");
 					return new TeamData
 					{
-						Report = report,
+						WebBase = webBase,
 						Org = match.Groups[1].Value,
 						Name = match.Groups[2].Value,
 					};

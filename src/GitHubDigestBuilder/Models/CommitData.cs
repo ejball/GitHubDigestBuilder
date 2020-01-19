@@ -10,6 +10,6 @@ namespace GitHubDigestBuilder.Models
 
 		public string? Remarks { get; set; }
 
-		public string Url => $"{Repo!.Report!.WebBase}/{Repo!.Name}/commit/{Sha}";
+		public string Url => $"{Repo!.Url}/commit/{Sha}";
 	}
 }

@@ -10,6 +10,6 @@ namespace GitHubDigestBuilder.Models
 
 		public List<EventData> Events { get; } = new List<EventData>();
 
-		public string Url => $"{Repo!.Report!.WebBase}/{Repo!.Name}/tree/{Name}";
+		public string Url => $"{Repo!.Url}/tree/{Name}";
 	}
 }

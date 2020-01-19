@@ -10,6 +10,6 @@ namespace GitHubDigestBuilder.Models
 
 		public List<ConversationData> Conversations { get; } = new List<ConversationData>();
 
-		public string Url => $"{Repo!.Report!.WebBase}/{Repo!.Name}/commit/{Sha}";
+		public string Url => $"{Repo!.Url}/commit/{Sha}";
 	}
 }

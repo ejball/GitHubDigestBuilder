@@ -20,6 +20,6 @@ namespace GitHubDigestBuilder.Models
 
 		public bool CanMerge { get; set; }
 
-		public string Url => CommitCount == 1 ? $"{Repo!.Report!.WebBase}/{Repo!.Name}/commit/{AfterSha}" : $"{Repo!.Report!.WebBase}/{Repo!.Name}/compare/{BeforeSha}...{AfterSha}";
+		public string Url => CommitCount == 1 ? $"{Repo!.Url}/commit/{AfterSha}" : $"{Repo!.Url}/compare/{BeforeSha}...{AfterSha}";
 	}
 }
