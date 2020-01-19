@@ -231,7 +231,10 @@ namespace GitHubDigestBuilder
 					void addWarning(string text)
 					{
 						if (!report.Warnings.Contains(text))
+						{
 							report.Warnings.Add(text);
+							Console.Error.WriteLine(text);
+						}
 					}
 
 					var sourceRepoNames = new List<string>();
