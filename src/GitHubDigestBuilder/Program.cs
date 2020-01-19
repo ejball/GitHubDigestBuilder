@@ -449,9 +449,7 @@ namespace GitHubDigestBuilder
 						{
 							var (rawNetworkEvents, networkStatus) = await loadEventsAsync("networks", sourceRepoName);
 							rawEvents.AddRange(rawNetworkEvents);
-							if (networkStatus == DownloadStatus.TooMuchActivity)
-								addWarning($"{sourceRepoName} repository had too much network activity.");
-							else if (networkStatus == DownloadStatus.NotFound)
+							if (networkStatus == DownloadStatus.NotFound)
 								addWarning($"{sourceRepoName} repository network not found.");
 						}
 
