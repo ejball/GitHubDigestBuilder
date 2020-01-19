@@ -1038,6 +1038,10 @@ namespace GitHubDigestBuilder
 						{
 							// ignore fork events
 						}
+						else if (eventType == "ReleaseEvent")
+						{
+							// ignore release events
+						}
 						else if (eventType == "IssuesApiEvent")
 						{
 							var action = payload.GetProperty("event").GetString();
