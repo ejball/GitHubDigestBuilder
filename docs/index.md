@@ -154,15 +154,6 @@ The full name of the repository to watch, including the organization/user and th
     - name: ejball/GitHubDigestBuilder
 ```
 
-#### user
-
-Watches all repositories of the specified user.
-
-```yaml
-  repos:
-    - user: ejball
-```
-
 #### org
 
 Watches all repositories of the specified organization.
@@ -172,9 +163,18 @@ Watches all repositories of the specified organization.
     - org: FacilityApi
 ```
 
+#### user
+
+Watches all repositories of the specified user.
+
+```yaml
+  repos:
+    - user: ejball
+```
+
 #### topic
 
-Only includes repositories with the specified topic. Used with `name` or `org`.
+Only includes repositories with the specified topic. Used with `org` or `user`.
 
 ```yaml
   repos:
