@@ -29,6 +29,8 @@ namespace GitHubDigestBuilder
 			var authTokens = new Queue<string>();
 			while (args.ReadOption("auth") is string authToken)
 				authTokens.Enqueue(authToken);
+			var isQuiet = args.ReadFlag("quiet");
+			var isVerbose = args.ReadFlag("verbose") && !isQuiet;
 			var configFilePath = args.ReadArgument();
 			args.VerifyComplete();
 
@@ -162,7 +164,8 @@ namespace GitHubDigestBuilder
 								request.Headers.IfNoneMatch.Add(EntityTagHeaderValue.Parse(etag));
 
 							var response = await httpClient.SendAsync(request);
-							Console.WriteLine($"{request.RequestUri.AbsoluteUri} [{response.StatusCode}]");
+							if (isVerbose)
+								Console.WriteLine($"{request.RequestUri.AbsoluteUri} [{response.StatusCode}]");
 
 							if (pageNumber == 1 && etag != null && response.StatusCode == HttpStatusCode.NotModified)
 							{
@@ -1132,6 +1135,8 @@ namespace GitHubDigestBuilder
 
 				var reportHtml = template.Render(templateContext);
 
+				if (!isQuiet)
+					Console.WriteLine(outputFile);
 				Directory.CreateDirectory(Path.GetDirectoryName(outputFile));
 				await File.WriteAllTextAsync(outputFile, reportHtml);
 			}
