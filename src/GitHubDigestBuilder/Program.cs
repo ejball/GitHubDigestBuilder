@@ -31,6 +31,7 @@ namespace GitHubDigestBuilder
 				authTokens.Enqueue(authToken);
 			var isQuiet = args.ReadFlag("quiet");
 			var isVerbose = args.ReadFlag("verbose") && !isQuiet;
+			var outputDirectory = args.ReadOption("output");
 			var configFilePath = args.ReadArgument();
 			args.VerifyComplete();
 
@@ -60,7 +61,11 @@ namespace GitHubDigestBuilder
 			var culture = settings.Culture == null ? CultureInfo.CurrentCulture : CultureInfo.GetCultureInfo(settings.Culture);
 
 			// determine output file
-			var outputFile = Path.Combine(configFileDirectory, settings.OutputDirectory ?? ".", $"{dateIso}.html");
+			if (outputDirectory != null)
+				outputDirectory = Path.GetFullPath(outputDirectory);
+			if (outputDirectory == null)
+				outputDirectory = settings.OutputDirectory != null ? Path.Combine(configFileDirectory, settings.OutputDirectory) : Path.GetFullPath(".");
+			var outputFile = Path.Combine(outputDirectory ?? "", $"{dateIso}.html");
 
 			// get GitHub settings
 			var githubs = new List<GitHubSettings>();
@@ -1144,7 +1149,9 @@ namespace GitHubDigestBuilder
 
 				if (!isQuiet)
 					Console.WriteLine(outputFile);
-				Directory.CreateDirectory(Path.GetDirectoryName(outputFile));
+
+				if (outputDirectory != null)
+					Directory.CreateDirectory(outputDirectory);
 				await File.WriteAllTextAsync(outputFile, reportHtml);
 			}
 			catch (Exception exception)

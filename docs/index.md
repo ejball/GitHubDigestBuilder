@@ -42,6 +42,14 @@ You can use this tool without a GitHub [personal access token](https://github.co
 
 If multiple `githubs` are provided in the configuration, add an `--auth` option for each one.
 
+### `--output`
+
+Use this option to specify an output directory relative to the current directory. The actual output file is named after the digest date, e.g. `2020-02-02.html`.
+
+```
+> GitHubDigestBuilder digest.yaml --verbose
+```
+
 ### `--verbose`
 
 If you want to see what GitHub APIs are being used, specify this option.
@@ -94,7 +102,7 @@ Specifies the GitHub configuration. Use `githubs` to specify an array of configu
 
 #### outputDirectory
 
-Specifies an output directory relative to the directory containing the configuration file. The actual output file is named after the digest date, e.g. `2020-02-02.html`.
+Specifies an output directory relative to the directory containing the configuration file. Only used if `--output` is not specified on the command-line.
 
 #### timeZoneOffsetHours
 
