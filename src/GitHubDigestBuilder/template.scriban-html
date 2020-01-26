@@ -12,8 +12,8 @@ a:hover, a:focus { text-decoration: none }
 </style>
 </head>
 <body data-spy="scroll" data-target="#toc">
-<div class="container">
-<div class="row">
+<div class="container-fluid">
+<div class="row ml-2">
 <div class="col-sm-9">
 
 {{- func start_link -}}
