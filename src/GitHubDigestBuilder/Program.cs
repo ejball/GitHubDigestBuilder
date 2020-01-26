@@ -52,7 +52,7 @@ namespace GitHubDigestBuilder
 			var timeZoneOffset = settings.TimeZoneOffsetHours != null ? TimeSpan.FromHours(settings.TimeZoneOffsetHours.Value) : DateTimeOffset.Now.Offset;
 			var now = new DateTimeOffset(DateTime.UtcNow).ToOffset(timeZoneOffset);
 			var todayIso = now.Date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
-			var date = dateString != null ? ParseDate(dateString) : now.Date.AddDays(-1.0);
+			var date = ParseDateArgument(dateString, now.Date);
 			var dateIso = date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
 			var startDateTimeUtc = new DateTimeOffset(date.Year, date.Month, date.Day, 0, 0, 0, timeZoneOffset).UtcDateTime;
 			var endDateTimeUtc = startDateTimeUtc.AddDays(1.0);
@@ -1185,8 +1185,15 @@ namespace GitHubDigestBuilder
 			return reader.ReadToEnd();
 		}
 
-		private static DateTime ParseDate(string value) =>
-			DateTime.ParseExact(value, "yyyy'-'MM'-'dd", CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal);
+		private static DateTime ParseDateArgument(string? value, DateTime today)
+		{
+			if (value == null || value.Equals("yesterday", StringComparison.InvariantCultureIgnoreCase))
+				return today.AddDays(-1.0);
+			else if (value.Equals("today", StringComparison.InvariantCultureIgnoreCase))
+				return today;
+			else
+				return DateTime.ParseExact(value, "yyyy'-'MM'-'dd", CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal);
+		}
 
 		private static DateTime ParseDateTime(string value) =>
 			DateTime.ParseExact(value, "yyyy'-'MM'-'dd'T'HH':'mm':'ss'Z'", CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal);
@@ -1222,19 +1229,15 @@ namespace GitHubDigestBuilder
 			return serializer.Serialize(deserializer.Deserialize(new StringReader(yaml))!);
 		}
 
-		private static string GetUsage()
-		{
-			return string.Join(Environment.NewLine, new[]
-			{
+		private static string GetUsage() =>
+			string.Join(Environment.NewLine,
 				"Usage: GitHubDigestBuilder config-file [options]",
 				"Options:",
 				"  --auth <github-personal-access-token>  (one for each GitHub)",
-				"  --date yyyy-MM-dd  (default: yesterday)",
+				"  --date <yyyy-MM-dd|today|yesterday>  (default: yesterday)",
 				"  --quiet  (no console output)",
 				"  --verbose  (show GitHub API usage)",
-				"Documentation: https://ejball.com/GitHubDigestBuilder/",
-			});
-		}
+				"Documentation: https://ejball.com/GitHubDigestBuilder/");
 
 		private enum DownloadStatus
 		{
