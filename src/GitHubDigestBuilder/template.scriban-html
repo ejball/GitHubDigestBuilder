@@ -261,6 +261,10 @@ a:hover, a:focus { text-decoration: none }
 {{ if !issue.body.empty? ~}}
 <li class="text-truncate">{{ event.actor | user_link }} {{ start_link issue.url "text-secondary" }}&#x21D2;</a> {{ issue.body | html.escape }}</li>
 {{ end # if ~}}
+{{ else if event.kind == 'reopened' ~}}
+<li class="text-truncate">{{ event.actor | user_link }} reopened issue</li>
+{{ else if event.kind == 'renamed' ~}}
+<li class="text-truncate">{{ event.actor | user_link }} renamed issue from <span class="text-secondary">{{ event.rename_from | html.escape }}</span> to <span class="text-secondary">{{ event.rename_to | html.escape }}</span></li>
 {{ else if event.kind == 'closed' ~}}
 <li class="text-truncate">{{ event.actor | user_link }} closed issue</li>
 {{ else if event.kind == 'comment-created' ~}}
