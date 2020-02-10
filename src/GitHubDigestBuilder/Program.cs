@@ -1108,7 +1108,7 @@ namespace GitHubDigestBuilder
 						foreach (var pullRequest in repo.PullRequests)
 						{
 							// remove redundant pull request close events
-							foreach (var redundantCloseEvent in pullRequest.Events
+							foreach (var redundantEvent in pullRequest.Events
 								.OfType<PullRequestEventData>()
 								.Where(x => x.Kind == "closed" || x.Kind == "merged")
 								.OrderBy(x => x.Kind == "merged")
@@ -1116,20 +1116,46 @@ namespace GitHubDigestBuilder
 								.SkipLast(1)
 								.ToList())
 							{
-								pullRequest.Events.Remove(redundantCloseEvent);
+								pullRequest.Events.Remove(redundantEvent);
+							}
+						}
+
+						foreach (var pullRequest in repo.PullRequests)
+						{
+							// remove redundant issue reopened events
+							foreach (var redundantEvent in pullRequest.Events
+								.OfType<PullRequestEventData>()
+								.Where(x => x.Kind == "reopened")
+								.SkipLast(1)
+								.ToList())
+							{
+								pullRequest.Events.Remove(redundantEvent);
 							}
 						}
 
 						foreach (var issue in repo.Issues)
 						{
 							// remove redundant issue close events
-							foreach (var redundantCloseEvent in issue.Events
+							foreach (var redundantEvent in issue.Events
 								.OfType<IssueEventData>()
 								.Where(x => x.Kind == "closed")
 								.SkipLast(1)
 								.ToList())
 							{
-								issue.Events.Remove(redundantCloseEvent);
+								issue.Events.Remove(redundantEvent);
+							}
+						}
+
+						foreach (var issue in repo.Issues)
+						{
+							// remove redundant issue reopened events
+							foreach (var redundantEvent in issue.Events
+								.OfType<IssueEventData>()
+								.Where(x => x.Kind == "reopened")
+								.SkipLast(1)
+								.ToList())
+							{
+								issue.Events.Remove(redundantEvent);
 							}
 						}
 
