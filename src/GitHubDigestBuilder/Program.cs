@@ -1050,12 +1050,13 @@ namespace GitHubDigestBuilder
 						else if (eventType == "IssuesApiEvent")
 						{
 							var action = payload.GetProperty("event").GetString();
-							if (action != "mentioned" &&
-								action != "subscribed" &&
-								action != "head_ref_deleted" &&
-								action != "referenced" &&
+							if (action != "comment_deleted" &&
 								action != "deployed" &&
-								action != "comment_deleted")
+								action != "mentioned" &&
+								action != "head_ref_deleted" &&
+								action != "head_ref_restored" &&
+								action != "referenced" &&
+								action != "subscribed")
 							{
 								var issueElement = payload.GetProperty("issue");
 								var number = issueElement.GetProperty("number").GetInt32();
