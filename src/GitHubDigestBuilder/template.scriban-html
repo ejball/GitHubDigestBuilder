@@ -279,6 +279,8 @@ a:hover, a:focus { text-decoration: none }
 <li class="text-truncate">{{ event.actor | user_link }} added label: <i>{{ event.label_name | html.escape }}</i></li>
 {{ else if event.kind == 'unlabeled' ~}}
 <li class="text-truncate">{{ event.actor | user_link }} removed label: <i>{{ event.label_name | html.escape }}</i></li>
+{{ else if event.kind == 'marked_as_duplicate' ~}}
+<li class="text-truncate">{{ event.actor | user_link }} marked issue as a duplicate</i></li>
 {{ else ~}}
 <li class="text-truncate">{{ event.actor | user_link }} <code>{{ event.kind }}</code></li>
 {{ end # if event.kind ~}}
