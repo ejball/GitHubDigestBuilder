@@ -34,7 +34,7 @@ The following command-line options are also supported:
 
 ### `--auth`
 
-You can use this tool without a GitHub [personal access token](https://github.com/settings/tokens) (PAT), but the GitHub event API is extremely rate-limited without one. You can provide the PAT via the `--auth` command-line option or via the `auth` configuration field described later. The *public_repo* permission should be sufficient.
+You can use this tool without a GitHub [personal access token](https://github.com/settings/tokens) (PAT), but the GitHub event API is extremely rate-limited without one. You can provide the PAT via the `--auth` command-line option or via the `authToken` or `authTokenEnv` configuration fields described later. The *public_repo* permission should be sufficient.
 
 ```
 > GitHubDigestBuilder digest.yaml --auth 1234567890123456789012345678901234567890
@@ -126,7 +126,11 @@ Public GitHub is used by default, but this field can be set to the host of a Git
 
 #### authToken
 
-The GitHub [personal access token](https://github.com/settings/tokens) to use with this GitHub instance. If the configuration file is not in a secure location, the `--auth` command-line option may be preferrable.
+The GitHub [personal access token](https://github.com/settings/tokens) to use with this GitHub instance. If the configuration file is not in a secure location, the `authTokenEnv` field or the `--auth` command-line option may be preferrable.
+
+#### authTokenEnv
+
+The name of the environment variable with the GitHub [personal access token](https://github.com/settings/tokens) to use with this GitHub instance.
 
 #### repos
 
