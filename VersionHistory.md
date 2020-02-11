@@ -1,5 +1,9 @@
 # Version History
 
+### 0.3.0
+
+* Support `authTokenEnv` to get GitHub PAT from an environment variable.
+
 ### 0.2.1
 
 * Ignore head_ref_restored.

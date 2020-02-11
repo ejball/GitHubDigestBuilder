@@ -8,6 +8,8 @@ namespace GitHubDigestBuilder.Settings
 
 		public string? AuthToken { get; set; }
 
+		public string? AuthTokenEnv { get; set; }
+
 		public List<RepoSettings>? Repos { get; set; }
 
 		public List<UserSettings>? Users { get; set; }

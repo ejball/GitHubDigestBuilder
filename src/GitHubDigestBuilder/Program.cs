@@ -92,7 +92,7 @@ namespace GitHubDigestBuilder
 					var httpClient = new HttpClient();
 					httpClient.DefaultRequestHeaders.UserAgent.Add(ProductInfoHeaderValue.Parse("GitHubDigestBuilder"));
 
-					var authToken = github.AuthToken;
+					var authToken = (github.AuthTokenEnv is null ? null : Environment.GetEnvironmentVariable(github.AuthTokenEnv)) ?? github.AuthToken;
 					if (authToken is null)
 						authTokens.TryDequeue(out authToken);
 					if (!string.IsNullOrWhiteSpace(authToken))
