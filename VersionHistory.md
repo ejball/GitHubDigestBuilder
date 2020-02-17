@@ -1,5 +1,9 @@
 # Version History
 
+### 0.4.0
+
+* Support `repo` under `excludes`.
+
 ### 0.3.0
 
 * Support `authTokenEnv` to get GitHub PAT from an environment variable.

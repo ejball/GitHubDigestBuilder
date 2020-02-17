@@ -323,12 +323,17 @@ namespace GitHubDigestBuilder
 					}
 
 					var usersToExclude = new HashSet<string>();
+					var reposToExclude = new HashSet<string>();
 					foreach (var exclude in github.Excludes ?? new List<FilterSettings>())
 					{
 						switch (exclude)
 						{
-						case { User: string user }:
+						case { User: string user, Repo: null }:
 							usersToExclude.Add(user);
+							break;
+
+						case { User: null, Repo: string repo }:
+							reposToExclude.Add(repo);
 							break;
 
 						default:
@@ -362,6 +367,9 @@ namespace GitHubDigestBuilder
 									continue;
 
 								if (usersToExclude.Contains(actorName))
+									continue;
+
+								if (reposToExclude.Contains(repoName))
 									continue;
 
 								if (!isNetwork)
@@ -448,6 +456,9 @@ namespace GitHubDigestBuilder
 
 					foreach (var sourceRepoName in sourceRepoNames)
 					{
+						if (reposToExclude.Contains(sourceRepoName))
+							continue;
+
 						var (rawRepoEvents, repoStatus) = await loadEventsAsync("repos", sourceRepoName);
 						rawEvents.AddRange(rawRepoEvents);
 						if (repoStatus == DownloadStatus.TooMuchActivity)
@@ -474,6 +485,9 @@ namespace GitHubDigestBuilder
 
 					foreach (var sourceUserName in sourceUserNames)
 					{
+						if (usersToExclude.Contains(sourceUserName))
+							continue;
+
 						var (rawUserEvents, userStatus) = await loadEventsAsync("users", sourceUserName);
 						rawEvents.AddRange(rawUserEvents);
 						if (userStatus == DownloadStatus.TooMuchActivity)
