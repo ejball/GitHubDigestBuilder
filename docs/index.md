@@ -211,3 +211,12 @@ The name of the user to exclude. Events triggered by that user will not be shown
   excludes:
     - user: dependabot-preview[bot]
 ```
+
+#### repo
+
+The name of the repository to exclude. Events triggered by that repository will not be shown.
+
+```yaml
+  excludes:
+    - repo: FacilityApi/RepoTemplate
+```
