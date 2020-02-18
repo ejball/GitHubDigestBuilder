@@ -203,6 +203,8 @@ The name of the user to watch. That user's events will still be organized by rep
 
 These fields are supported by the `excludes` objects.
 
+Names in exclude fields are case-insensitive. Use an asterisk (`*`) to match zero or more characters; all matching names will be excluded.
+
 #### user
 
 The name of the user to exclude. Events triggered by that user will not be shown.

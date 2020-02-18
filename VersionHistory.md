@@ -1,5 +1,9 @@
 # Version History
 
+### 0.5.0
+
+* Support wildcards for repo/user filters.
+
 ### 0.4.0
 
 * Support `repo` under `excludes`.

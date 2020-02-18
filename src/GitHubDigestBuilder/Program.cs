@@ -322,18 +322,21 @@ namespace GitHubDigestBuilder
 						}
 					}
 
-					var usersToExclude = new HashSet<string>();
-					var reposToExclude = new HashSet<string>();
+					var usersToExclude = new List<Regex>();
+					var reposToExclude = new List<Regex>();
 					foreach (var exclude in github.Excludes ?? new List<FilterSettings>())
 					{
+						Regex createRegex(string value) =>
+							new Regex("^" + Regex.Escape(value).Replace(@"\*", ".*") + "$", RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
+
 						switch (exclude)
 						{
 						case { User: string user, Repo: null }:
-							usersToExclude.Add(user);
+							usersToExclude.Add(createRegex(user));
 							break;
 
 						case { User: null, Repo: string repo }:
-							reposToExclude.Add(repo);
+							reposToExclude.Add(createRegex(repo));
 							break;
 
 						default:
@@ -366,10 +369,10 @@ namespace GitHubDigestBuilder
 								if (!handledEventIds.Add(eventId))
 									continue;
 
-								if (usersToExclude.Contains(actorName))
+								if (usersToExclude.Any(x => x.IsMatch(actorName)))
 									continue;
 
-								if (reposToExclude.Contains(repoName))
+								if (reposToExclude.Any(x => x.IsMatch(repoName)))
 									continue;
 
 								if (!isNetwork)
@@ -433,7 +436,7 @@ namespace GitHubDigestBuilder
 								if (!handledEventIds.Add(eventId))
 									continue;
 
-								if (usersToExclude.Contains(actorName))
+								if (usersToExclude.Any(x => x.IsMatch(actorName)))
 									continue;
 
 								events.Add(new RawEventData
@@ -456,7 +459,7 @@ namespace GitHubDigestBuilder
 
 					foreach (var sourceRepoName in sourceRepoNames)
 					{
-						if (reposToExclude.Contains(sourceRepoName))
+						if (reposToExclude.Any(x => x.IsMatch(sourceRepoName)))
 							continue;
 
 						var (rawRepoEvents, repoStatus) = await loadEventsAsync("repos", sourceRepoName);
@@ -485,7 +488,7 @@ namespace GitHubDigestBuilder
 
 					foreach (var sourceUserName in sourceUserNames)
 					{
-						if (usersToExclude.Contains(sourceUserName))
+						if (usersToExclude.Any(x => x.IsMatch(sourceUserName)))
 							continue;
 
 						var (rawUserEvents, userStatus) = await loadEventsAsync("users", sourceUserName);
