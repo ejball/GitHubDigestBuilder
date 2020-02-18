@@ -372,7 +372,7 @@ namespace GitHubDigestBuilder
 								if (usersToExclude.Any(x => x.IsMatch(actorName)))
 									continue;
 
-								if (reposToExclude.Any(x => x.IsMatch(repoName)))
+								if (!isNetwork && reposToExclude.Any(x => x.IsMatch(repoName)))
 									continue;
 
 								if (!isNetwork)
