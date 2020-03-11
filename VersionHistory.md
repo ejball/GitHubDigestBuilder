@@ -1,5 +1,9 @@
 # Version History
 
+### 0.5.1
+
+* Support `milestoned` issue event.
+
 ### 0.5.0
 
 * Support wildcards for repo/user filters.

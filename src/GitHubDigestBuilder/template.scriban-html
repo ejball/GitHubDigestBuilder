@@ -281,6 +281,8 @@ a:hover, a:focus { text-decoration: none }
 <li class="text-truncate">{{ event.actor | user_link }} removed label: <i>{{ event.label_name | html.escape }}</i></li>
 {{ else if event.kind == 'marked_as_duplicate' ~}}
 <li class="text-truncate">{{ event.actor | user_link }} marked issue as a duplicate</i></li>
+{{ else if event.kind == 'milestoned' ~}}
+<li class="text-truncate">{{ event.actor | user_link }} added issue to the <i>{{ event.milestone_title | html.escape }}</i> milestone</i></li>
 {{ else ~}}
 <li class="text-truncate">{{ event.actor | user_link }} <code>{{ event.kind }}</code></li>
 {{ end # if event.kind ~}}

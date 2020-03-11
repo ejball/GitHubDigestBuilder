@@ -632,6 +632,9 @@ namespace GitHubDigestBuilder
 							if (payloadElement.TryGetProperty("label", "name")?.GetString() is string labelName)
 								eventData.LabelName = labelName;
 
+							if (payloadElement.TryGetProperty("milestone", "title")?.GetString() is string milestoneTitle)
+								eventData.MilestoneTitle = milestoneTitle;
+
 							if (payloadElement.TryGetProperty("rename", "from")?.GetString() is string renameFrom)
 								eventData.RenameFrom = renameFrom;
 

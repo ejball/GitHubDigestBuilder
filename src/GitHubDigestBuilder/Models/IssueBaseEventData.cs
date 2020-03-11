@@ -12,6 +12,8 @@ namespace GitHubDigestBuilder.Models
 
 		public string? LabelName { get; set; }
 
+		public string? MilestoneTitle { get; set; }
+
 		public string? RenameFrom { get; set; }
 
 		public string? RenameTo { get; set; }
