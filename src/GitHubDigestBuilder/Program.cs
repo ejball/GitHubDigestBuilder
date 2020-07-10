@@ -913,14 +913,14 @@ namespace GitHubDigestBuilder
 
 							pullRequest.FromBranch = new BranchData
 							{
-								Name = pullRequestElement.GetProperty("head", "ref").GetString(),
-								Repo = createRepo(pullRequestElement.GetProperty("head", "repo", "full_name").GetString()),
+								Name = pullRequestElement.TryGetProperty("head", "ref")?.GetString() ?? "unknown",
+								Repo = createRepo(pullRequestElement.TryGetProperty("head", "repo", "full_name")?.GetString() ?? "unknown"),
 							};
 
 							pullRequest.ToBranch = new BranchData
 							{
-								Name = pullRequestElement.GetProperty("base", "ref").GetString(),
-								Repo = createRepo(pullRequestElement.GetProperty("base", "repo", "full_name").GetString()),
+								Name = pullRequestElement.TryGetProperty("base", "ref")?.GetString() ?? "unknown",
+								Repo = createRepo(pullRequestElement.TryGetProperty("base", "repo", "full_name")?.GetString() ?? "unknown"),
 							};
 
 							setIssueBaseProperties(pullRequest, pullRequestElement);
