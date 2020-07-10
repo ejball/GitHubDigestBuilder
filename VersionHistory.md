@@ -1,5 +1,9 @@
 # Version History
 
+### 0.5.2
+
+* Avoid crash on unexpected data.
+
 ### 0.5.1
 
 * Support `milestoned` issue event.
