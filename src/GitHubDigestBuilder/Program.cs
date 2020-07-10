@@ -168,7 +168,7 @@ namespace GitHubDigestBuilder
 							if (pageNumber == 1 && etag != null)
 								request.Headers.IfNoneMatch.Add(EntityTagHeaderValue.Parse(etag));
 
-							var response = await httpClient.SendAsync(request);
+							var response = await httpClient!.SendAsync(request);
 							if (isVerbose)
 								Console.WriteLine($"{request.RequestUri.AbsoluteUri} [{response.StatusCode}]");
 
@@ -235,7 +235,7 @@ namespace GitHubDigestBuilder
 
 					void addWarning(string text)
 					{
-						if (!report.Warnings.Contains(text))
+						if (!report!.Warnings.Contains(text))
 						{
 							report.Warnings.Add(text);
 							Console.Error.WriteLine(text);
