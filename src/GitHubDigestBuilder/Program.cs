@@ -289,20 +289,20 @@ namespace GitHubDigestBuilder
 					{
 						switch (settingsRepo)
 						{
-						case { Name: string name, User: null, Org: null, Topic: null }:
-							addRepoForSource(name, sourceIndex);
-							break;
+							case { Name: string name, User: null, Org: null, Topic: null }:
+								addRepoForSource(name, sourceIndex);
+								break;
 
-						case { Name: null, User: string user, Org: null }:
-							await addReposForSource("users", user, sourceIndex, topic: settingsRepo.Topic);
-							break;
+							case { Name: null, User: string user, Org: null }:
+								await addReposForSource("users", user, sourceIndex, topic: settingsRepo.Topic);
+								break;
 
-						case { Name: null, User: null, Org: string org }:
-							await addReposForSource("orgs", org, sourceIndex, topic: settingsRepo.Topic);
-							break;
+							case { Name: null, User: null, Org: string org }:
+								await addReposForSource("orgs", org, sourceIndex, topic: settingsRepo.Topic);
+								break;
 
-						default:
-							throw new ApplicationException("Invalid repo source: " + JsonSerializer.Serialize(settingsRepo));
+							default:
+								throw new ApplicationException("Invalid repo source: " + JsonSerializer.Serialize(settingsRepo));
 						}
 					}
 
@@ -312,13 +312,13 @@ namespace GitHubDigestBuilder
 					{
 						switch (settingsUser)
 						{
-						case { Name: string name }:
-							if (!sourceUserNames.Contains(name))
-								sourceUserNames.Add(name);
-							break;
+							case { Name: string name }:
+								if (!sourceUserNames.Contains(name))
+									sourceUserNames.Add(name);
+								break;
 
-						default:
-							throw new ApplicationException("Invalid user source: " + JsonSerializer.Serialize(settingsUser));
+							default:
+								throw new ApplicationException("Invalid user source: " + JsonSerializer.Serialize(settingsUser));
 						}
 					}
 
@@ -331,16 +331,16 @@ namespace GitHubDigestBuilder
 
 						switch (exclude)
 						{
-						case { User: string user, Repo: null }:
-							usersToExclude.Add(createRegex(user));
-							break;
+							case { User: string user, Repo: null }:
+								usersToExclude.Add(createRegex(user));
+								break;
 
-						case { User: null, Repo: string repo }:
-							reposToExclude.Add(createRegex(repo));
-							break;
+							case { User: null, Repo: string repo }:
+								reposToExclude.Add(createRegex(repo));
+								break;
 
-						default:
-							throw new ApplicationException("Invalid exclude: " + JsonSerializer.Serialize(exclude));
+							default:
+								throw new ApplicationException("Invalid exclude: " + JsonSerializer.Serialize(exclude));
 						}
 					}
 
