@@ -1,14 +1,24 @@
 using System;
 using Faithlife.Build;
 
-internal static class Build
+return BuildRunner.Execute(args, build =>
 {
-	public static int Main(string[] args) => BuildRunner.Execute(args, build =>
-	{
-		build.AddDotNetTargets(
-			new DotNetBuildSettings
+	var gitLogin = new GitLoginInfo("ejball", Environment.GetEnvironmentVariable("BUILD_BOT_PASSWORD") ?? "");
+
+	build.AddDotNetTargets(
+		new DotNetBuildSettings
+		{
+			NuGetApiKey = Environment.GetEnvironmentVariable("NUGET_API_KEY"),
+			DocsSettings = new DotNetDocsSettings
 			{
-				NuGetApiKey = Environment.GetEnvironmentVariable("NUGET_API_KEY"),
-			});
-	});
-}
+				GitLogin = gitLogin,
+				GitAuthor = new GitAuthorInfo("ejball", "ejball@gmail.com"),
+				SourceCodeUrl = "https://github.com/ejball/RepoName/tree/master/src",
+			},
+			PackageSettings = new DotNetPackageSettings
+			{
+				GitLogin = gitLogin,
+				PushTagOnPublish = x => $"v{x.Version}",
+			},
+		});
+});
