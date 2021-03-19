@@ -881,20 +881,24 @@ namespace GitHubDigestBuilder
 							var repo = getOrAddRepo();
 							var commit = repo.CommentedCommits.SingleOrDefault(x => x.Sha == sha);
 							if (commit == null)
+							{
 								repo.CommentedCommits.Add(commit = new CommentedCommitData
 								{
 									Repo = repo,
-									Sha = sha
+									Sha = sha,
 								});
+							}
 
 							var conversation = commit.Conversations.SingleOrDefault(x => x.FilePath == filePath && x.Position == position?.ToString());
 							if (conversation == null)
+							{
 								commit.Conversations.Add(conversation = new ConversationData
 								{
 									Commit = commit,
 									FilePath = filePath,
-									Position = position.ToString()
+									Position = position.ToString(),
 								});
+							}
 
 							conversation.Comments.Add(new CommentData
 							{
@@ -957,7 +961,7 @@ namespace GitHubDigestBuilder
 									{
 										PullRequest = pullRequest,
 										FilePath = filePath,
-										Position = position
+										Position = position,
 									};
 									addPullRequestEvent(pullRequest, "review-comment-created").Conversation = conversation;
 								}

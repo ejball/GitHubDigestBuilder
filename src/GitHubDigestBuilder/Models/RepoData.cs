@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 
 namespace GitHubDigestBuilder.Models
@@ -22,7 +23,7 @@ namespace GitHubDigestBuilder.Models
 
 		public List<IssueData> Issues { get; } = new List<IssueData>();
 
-		public string? Org => Name?[..Name.IndexOf('/')];
+		public string? Org => Name?[..Name.IndexOf('/', StringComparison.Ordinal)];
 
 		public string Url => $"{WebBase}/{Name}";
 	}

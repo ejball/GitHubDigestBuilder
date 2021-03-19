@@ -5,6 +5,7 @@
     <TargetFramework>netcoreapp3.1</TargetFramework>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
+    <NoWarn>$(NoWarn);CA1002</NoWarn>
     <Description>A tool that builds an HTML digest of daily GitHub activity.</Description>
     <PackageTags>GitHub activity digest report</PackageTags>
     <IsPackable>true</IsPackable>
