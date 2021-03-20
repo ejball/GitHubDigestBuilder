@@ -126,7 +126,7 @@ namespace GitHubDigestBuilder
 					// stop when rate limited
 					var rateLimitResetUtc = default(DateTime?);
 
-					async Task<PagedDownloadResult> loadPagesAsync(string url, string[] accepts, int maxPageCount, Func<JsonElement, bool>? isLastPage = null)
+					async Task<PagedDownloadResult> LoadPagesAsync(string url, string[] accepts, int maxPageCount, Func<JsonElement, bool>? isLastPage = null)
 					{
 						var cacheName = Regex.Replace(Regex.Replace(url, @"\?.*$", ""), @"/+", "_").Trim('_');
 						var cacheFile = Path.Combine(cacheDirectory, $"{cacheName}.json");
@@ -194,7 +194,7 @@ namespace GitHubDigestBuilder
 									$"Try again at {new DateTimeOffset(rateLimitResetUtc.Value).ToOffset(timeZoneOffset).ToString("f", culture)}.";
 								if (authToken is null)
 									message += " Specify a GitHub personal access token for a much higher rate limit.";
-								addWarning(message);
+								AddWarning(message);
 
 								return new PagedDownloadResult(DownloadStatus.RateLimited);
 							}
@@ -233,7 +233,7 @@ namespace GitHubDigestBuilder
 						return new PagedDownloadResult(status, items);
 					}
 
-					void addWarning(string text)
+					void AddWarning(string text)
 					{
 						if (!report!.Warnings.Contains(text))
 						{
@@ -245,7 +245,7 @@ namespace GitHubDigestBuilder
 					var sourceRepoNames = new List<string>();
 					var sourceRepoIndices = new Dictionary<string, int>();
 
-					void addRepoForSource(string repoName, int sourceIndex)
+					void AddRepoForSource(string repoName, int sourceIndex)
 					{
 						if (!sourceRepoIndices.ContainsKey(repoName))
 						{
@@ -254,10 +254,10 @@ namespace GitHubDigestBuilder
 						}
 					}
 
-					async Task addReposForSource(string sourceKind, string sourceName, int sourceIndex, string? topic)
+					async Task AddReposForSource(string sourceKind, string sourceName, int sourceIndex, string? topic)
 					{
 						var orgRepoNames = new HashSet<string>();
-						var result = await loadPagesAsync($"{sourceKind}/{sourceName}/repos?sort=updated&per_page=100",
+						var result = await LoadPagesAsync($"{sourceKind}/{sourceName}/repos?sort=updated&per_page=100",
 							accepts: new[] { "application/vnd.github.mercy-preview+json" }, maxPageCount: 100);
 
 						foreach (var repoElement in result.Elements)
@@ -272,12 +272,12 @@ namespace GitHubDigestBuilder
 						}
 
 						foreach (var orgRepoName in orgRepoNames)
-							addRepoForSource(orgRepoName, sourceIndex);
+							AddRepoForSource(orgRepoName, sourceIndex);
 
 						if (result.Status == DownloadStatus.TooMuchActivity)
-							addWarning($"Too many updated repositories found for {sourceName}.");
+							AddWarning($"Too many updated repositories found for {sourceName}.");
 						else if (result.Status == DownloadStatus.NotFound)
-							addWarning($"Failed to find repositories for {sourceName}.");
+							AddWarning($"Failed to find repositories for {sourceName}.");
 					}
 
 					var settingsRepos = github.Repos ?? new List<RepoSettings>();
@@ -290,15 +290,15 @@ namespace GitHubDigestBuilder
 						switch (settingsRepo)
 						{
 							case { Name: string name, User: null, Org: null, Topic: null }:
-								addRepoForSource(name, sourceIndex);
+								AddRepoForSource(name, sourceIndex);
 								break;
 
 							case { Name: null, User: string user, Org: null }:
-								await addReposForSource("users", user, sourceIndex, topic: settingsRepo.Topic);
+								await AddReposForSource("users", user, sourceIndex, topic: settingsRepo.Topic);
 								break;
 
 							case { Name: null, User: null, Org: string org }:
-								await addReposForSource("orgs", org, sourceIndex, topic: settingsRepo.Topic);
+								await AddReposForSource("orgs", org, sourceIndex, topic: settingsRepo.Topic);
 								break;
 
 							default:
@@ -326,17 +326,17 @@ namespace GitHubDigestBuilder
 					var reposToExclude = new List<Regex>();
 					foreach (var exclude in github.Excludes ?? new List<FilterSettings>())
 					{
-						Regex createRegex(string value) =>
+						Regex CreateRegex(string value) =>
 							new Regex("^" + Regex.Escape(value).Replace(@"\*", ".*") + "$", RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
 
 						switch (exclude)
 						{
 							case { User: string user, Repo: null }:
-								usersToExclude.Add(createRegex(user));
+								usersToExclude.Add(CreateRegex(user));
 								break;
 
 							case { User: null, Repo: string repo }:
-								reposToExclude.Add(createRegex(repo));
+								reposToExclude.Add(CreateRegex(repo));
 								break;
 
 							default:
@@ -346,12 +346,12 @@ namespace GitHubDigestBuilder
 
 					var pullRequestBranches = new Dictionary<(string SourceRepo, string SourceBranch), List<(string TargetRepo, int TargetNumber, DateTime When, string? Action)>>();
 
-					async Task<(IReadOnlyList<RawEventData> Events, DownloadStatus Status)> loadEventsAsync(string sourceKind, string sourceName)
+					async Task<(IReadOnlyList<RawEventData> Events, DownloadStatus Status)> LoadEventsAsync(string sourceKind, string sourceName)
 					{
 						var isNetwork = sourceKind == "networks";
 
 						var events = new List<RawEventData>();
-						var result = await loadPagesAsync($"{sourceKind}/{sourceName}/events",
+						var result = await LoadPagesAsync($"{sourceKind}/{sourceName}/events",
 							accepts: new[] { "application/vnd.github.v3+json" }, maxPageCount: 10,
 							isLastPage: page => page.EnumerateArray().Any(x => ParseDateTime(x.GetProperty("created_at").GetString()) < startDateTimeUtc));
 
@@ -418,10 +418,10 @@ namespace GitHubDigestBuilder
 						return (events, result.Status);
 					}
 
-					async Task<(IReadOnlyList<RawEventData> Events, DownloadStatus Status)> loadIssueEventsAsync(string repoName)
+					async Task<(IReadOnlyList<RawEventData> Events, DownloadStatus Status)> LoadIssueEventsAsync(string repoName)
 					{
 						var events = new List<RawEventData>();
-						var result = await loadPagesAsync($"repos/{repoName}/issues/events?per_page=100",
+						var result = await LoadPagesAsync($"repos/{repoName}/issues/events?per_page=100",
 							accepts: new[] { "application/vnd.github.v3+json" }, maxPageCount: 10,
 							isLastPage: page => page.EnumerateArray().Any(x => ParseDateTime(x.GetProperty("created_at").GetString()) < startDateTimeUtc));
 
@@ -462,28 +462,28 @@ namespace GitHubDigestBuilder
 						if (reposToExclude.Any(x => x.IsMatch(sourceRepoName)))
 							continue;
 
-						var (rawRepoEvents, repoStatus) = await loadEventsAsync("repos", sourceRepoName);
+						var (rawRepoEvents, repoStatus) = await LoadEventsAsync("repos", sourceRepoName);
 						rawEvents.AddRange(rawRepoEvents);
 						if (repoStatus == DownloadStatus.TooMuchActivity)
-							addWarning($"{sourceRepoName} repository had too much activity.");
+							AddWarning($"{sourceRepoName} repository had too much activity.");
 						else if (repoStatus == DownloadStatus.NotFound)
-							addWarning($"{sourceRepoName} repository not found.");
+							AddWarning($"{sourceRepoName} repository not found.");
 
 						// check repository network for push events if we know of any pull request branches
 						if (repoStatus != DownloadStatus.NotFound && pullRequestBranches.Any(prb => prb.Value.Any(x => x.TargetRepo == sourceRepoName)))
 						{
-							var (rawNetworkEvents, networkStatus) = await loadEventsAsync("networks", sourceRepoName);
+							var (rawNetworkEvents, networkStatus) = await LoadEventsAsync("networks", sourceRepoName);
 							rawEvents.AddRange(rawNetworkEvents);
 							if (networkStatus == DownloadStatus.NotFound)
-								addWarning($"{sourceRepoName} repository network not found.");
+								AddWarning($"{sourceRepoName} repository network not found.");
 						}
 
-						var (rawRepoIssueEvents, repoIssueStatus) = await loadIssueEventsAsync(sourceRepoName);
+						var (rawRepoIssueEvents, repoIssueStatus) = await LoadIssueEventsAsync(sourceRepoName);
 						rawEvents.AddRange(rawRepoIssueEvents);
 						if (repoIssueStatus == DownloadStatus.TooMuchActivity)
-							addWarning($"{sourceRepoName} repository had too much issue activity.");
+							AddWarning($"{sourceRepoName} repository had too much issue activity.");
 						else if (repoIssueStatus == DownloadStatus.NotFound)
-							addWarning($"{sourceRepoName} repository not found.");
+							AddWarning($"{sourceRepoName} repository not found.");
 					}
 
 					foreach (var sourceUserName in sourceUserNames)
@@ -491,31 +491,31 @@ namespace GitHubDigestBuilder
 						if (usersToExclude.Any(x => x.IsMatch(sourceUserName)))
 							continue;
 
-						var (rawUserEvents, userStatus) = await loadEventsAsync("users", sourceUserName);
+						var (rawUserEvents, userStatus) = await LoadEventsAsync("users", sourceUserName);
 						rawEvents.AddRange(rawUserEvents);
 						if (userStatus == DownloadStatus.TooMuchActivity)
-							addWarning($"{sourceUserName} user had too much activity.");
+							AddWarning($"{sourceUserName} user had too much activity.");
 						else if (userStatus == DownloadStatus.NotFound)
-							addWarning($"{sourceUserName} user not found.");
+							AddWarning($"{sourceUserName} user not found.");
 					}
 
 					rawEvents = rawEvents.OrderBy(x => x.CreatedUtc).ToList();
 
-					RepoData createRepo(string name) =>
+					RepoData CreateRepo(string name) =>
 						new RepoData
 						{
 							WebBase = webBase,
 							Name = name,
 						};
 
-					UserData createUser(string name) =>
+					UserData CreateUser(string name) =>
 						new UserData
 						{
 							WebBase = webBase,
 							Name = name,
 						};
 
-					TeamData createTeam(string url)
+					TeamData CreateTeam(string url)
 					{
 						var match = Regex.Match(url, @"/orgs/([^/]+)/teams/([^/]+)$");
 						return new TeamData
@@ -531,28 +531,28 @@ namespace GitHubDigestBuilder
 					foreach (var rawEvent in rawEvents)
 					{
 						var repoName = rawEvent.RepoName!;
-						var actor = createUser(rawEvent.ActorName!);
+						var actor = CreateUser(rawEvent.ActorName!);
 
-						RepoData getOrAddRepo(string? actualRepoName = null)
+						RepoData GetOrAddRepo(string? actualRepoName = null)
 						{
 							actualRepoName ??= repoName;
 
 							var repo = repos.SingleOrDefault(x => x.Name == actualRepoName);
 							if (repo == null)
 							{
-								repo = createRepo(actualRepoName);
+								repo = CreateRepo(actualRepoName);
 								repos.Add(repo);
 							}
 
 							return repo;
 						}
 
-						BranchData getOrAddBranch(string name)
+						BranchData GetOrAddBranch(string name)
 						{
 							if (name == null)
 								throw new InvalidOperationException();
 
-							var repo = getOrAddRepo();
+							var repo = GetOrAddRepo();
 							var branch = repo.Branches.SingleOrDefault(x => x.Name == name);
 							if (branch == null)
 							{
@@ -567,9 +567,9 @@ namespace GitHubDigestBuilder
 							return branch;
 						}
 
-						PullRequestData getOrAddPullRequest(int number, string? actualRepoName = null)
+						PullRequestData GetOrAddPullRequest(int number, string? actualRepoName = null)
 						{
-							var repo = getOrAddRepo(actualRepoName);
+							var repo = GetOrAddRepo(actualRepoName);
 							var pullRequest = repo.PullRequests.SingleOrDefault(x => x.Number == number);
 							if (pullRequest == null)
 							{
@@ -584,9 +584,9 @@ namespace GitHubDigestBuilder
 							return pullRequest;
 						}
 
-						IssueData getOrAddIssue(int number)
+						IssueData GetOrAddIssue(int number)
 						{
-							var repo = getOrAddRepo();
+							var repo = GetOrAddRepo();
 							var issue = repo.Issues.SingleOrDefault(x => x.Number == number);
 							if (issue == null)
 							{
@@ -601,7 +601,7 @@ namespace GitHubDigestBuilder
 							return issue;
 						}
 
-						void setIssueBaseProperties(IssueBaseData data, JsonElement element)
+						void SetIssueBaseProperties(IssueBaseData data, JsonElement element)
 						{
 							var title = element.GetProperty("title").GetString();
 							if (title != null)
@@ -612,22 +612,22 @@ namespace GitHubDigestBuilder
 								data.Body = body;
 						}
 
-						void setIssueBaseEventProperties(IssueBaseEventData eventData, JsonElement payloadElement)
+						void SetIssueBaseEventProperties(IssueBaseEventData eventData, JsonElement payloadElement)
 						{
 							if ((payloadElement.TryGetProperty("review_requester", "login")?.GetString() ??
 								payloadElement.TryGetProperty("assigner", "login")?.GetString()) is string sourceUserName)
 							{
-								eventData.SourceUser = createUser(sourceUserName);
+								eventData.SourceUser = CreateUser(sourceUserName);
 							}
 
 							if ((payloadElement.TryGetProperty("requested_reviewer", "login")?.GetString() ??
 								payloadElement.TryGetProperty("assignee", "login")?.GetString()) is string targetUserName)
 							{
-								eventData.TargetUser = createUser(targetUserName);
+								eventData.TargetUser = CreateUser(targetUserName);
 							}
 
 							if (payloadElement.TryGetProperty("requested_team", "html_url")?.GetString() is string targetTeamUrl)
-								eventData.TargetTeam = createTeam(targetTeamUrl);
+								eventData.TargetTeam = CreateTeam(targetTeamUrl);
 
 							if (payloadElement.TryGetProperty("label", "name")?.GetString() is string labelName)
 								eventData.LabelName = labelName;
@@ -642,7 +642,7 @@ namespace GitHubDigestBuilder
 								eventData.RenameTo = renameTo;
 						}
 
-						PullRequestEventData addPullRequestEvent(PullRequestData pullRequest, string kind)
+						PullRequestEventData AddPullRequestEvent(PullRequestData pullRequest, string kind)
 						{
 							var eventData = new PullRequestEventData
 							{
@@ -654,7 +654,7 @@ namespace GitHubDigestBuilder
 							return eventData;
 						}
 
-						IssueEventData addIssueEvent(IssueData issue, string kind)
+						IssueEventData AddIssueEvent(IssueData issue, string kind)
 						{
 							var eventData = new IssueEventData
 							{
@@ -666,7 +666,7 @@ namespace GitHubDigestBuilder
 							return eventData;
 						}
 
-						List<(string RepoName, int Number)> getAssociatedPullRequests(string branchName)
+						List<(string RepoName, int Number)> GetAssociatedPullRequests(string branchName)
 						{
 							var pullRequests = new HashSet<(string RepoName, int Number)>();
 							if (pullRequestBranches.TryGetValue((repoName, branchName), out var pullRequestEvents))
@@ -692,24 +692,24 @@ namespace GitHubDigestBuilder
 							var commitCount = payload.TryGetProperty("size")?.GetInt32() ?? 0;
 							if (refName == null || !refName.StartsWith(branchRefPrefix, StringComparison.Ordinal))
 							{
-								addWarning($"Ignoring PushEvent to {refName} of {repoName}.");
+								AddWarning($"Ignoring PushEvent to {refName} of {repoName}.");
 							}
 							else if (commitCount > 0)
 							{
 								var branchName = refName.Substring(branchRefPrefix.Length);
 
-								var associatedPullRequests = getAssociatedPullRequests(branchName);
+								var associatedPullRequests = GetAssociatedPullRequests(branchName);
 								if (associatedPullRequests.Count != 0)
 								{
 									foreach (var associatedPullRequest in associatedPullRequests)
-										addPushEvent(null, getOrAddPullRequest(associatedPullRequest.Number, associatedPullRequest.RepoName));
+										AddPushEvent(null, GetOrAddPullRequest(associatedPullRequest.Number, associatedPullRequest.RepoName));
 								}
 								else if (!rawEvent.IsNetwork)
 								{
-									addPushEvent(getOrAddBranch(branchName), null);
+									AddPushEvent(GetOrAddBranch(branchName), null);
 								}
 
-								void addPushEvent(BranchData? branch, PullRequestData? pullRequest)
+								void AddPushEvent(BranchData? branch, PullRequestData? pullRequest)
 								{
 									var events = branch?.Events ?? pullRequest?.Events ?? throw new InvalidOperationException();
 
@@ -719,7 +719,7 @@ namespace GitHubDigestBuilder
 									var commits = payload.TryGetProperty("commits")?.EnumerateArray().ToList() ?? new List<JsonElement>();
 									var canMerge = commitCount == commits.Count;
 
-									var pushRepo = branch?.Repo ?? createRepo(repoName);
+									var pushRepo = branch?.Repo ?? CreateRepo(repoName);
 
 									var push = events.LastOrDefault() as PushEventData;
 									if (push == null ||
@@ -776,7 +776,7 @@ namespace GitHubDigestBuilder
 							{
 								if (!rawEvent.IsNetwork)
 								{
-									var repo = getOrAddRepo();
+									var repo = GetOrAddRepo();
 									repo.TagEvents.Add(new TagEventData
 									{
 										Kind = "create-tag",
@@ -792,12 +792,12 @@ namespace GitHubDigestBuilder
 							}
 							else if (refType == "branch")
 							{
-								var associatedPullRequests = getAssociatedPullRequests(refName);
+								var associatedPullRequests = GetAssociatedPullRequests(refName);
 								if (associatedPullRequests.Count != 0)
 								{
 									foreach (var associatedPullRequest in associatedPullRequests)
 									{
-										var pullRequest = getOrAddPullRequest(associatedPullRequest.Number, associatedPullRequest.RepoName);
+										var pullRequest = GetOrAddPullRequest(associatedPullRequest.Number, associatedPullRequest.RepoName);
 										pullRequest.Events.Add(new BranchEventData
 										{
 											Kind = "create-branch",
@@ -806,14 +806,14 @@ namespace GitHubDigestBuilder
 											Branch = new BranchData
 											{
 												Name = refName,
-												Repo = createRepo(repoName),
+												Repo = CreateRepo(repoName),
 											},
 										});
 									}
 								}
 								else if (!rawEvent.IsNetwork)
 								{
-									var branch = getOrAddBranch(refName);
+									var branch = GetOrAddBranch(refName);
 
 									branch.Events.Add(new BranchEventData
 									{
@@ -828,7 +828,7 @@ namespace GitHubDigestBuilder
 							{
 								if (!rawEvent.IsNetwork)
 								{
-									var repo = getOrAddRepo();
+									var repo = GetOrAddRepo();
 									repo.RepoEvents.Add(new RepoEventData
 									{
 										Kind = "create-repo",
@@ -839,7 +839,7 @@ namespace GitHubDigestBuilder
 							}
 							else
 							{
-								addWarning($"CreateEvent ref type {refType} not supported to {repoName}.");
+								AddWarning($"CreateEvent ref type {refType} not supported to {repoName}.");
 							}
 						}
 						else if (eventType == "DeleteEvent")
@@ -852,7 +852,7 @@ namespace GitHubDigestBuilder
 							{
 								var action = page.GetProperty("action").GetString();
 								var pageName = page.GetProperty("page_name").GetString();
-								var repo = getOrAddRepo();
+								var repo = GetOrAddRepo();
 								var wikiEvent = repo.WikiEvents.LastOrDefault();
 								if (wikiEvent == null || wikiEvent.Actor?.Name != actor.Name || wikiEvent.PageName != pageName)
 								{
@@ -878,7 +878,7 @@ namespace GitHubDigestBuilder
 							var filePath = data.TryGetProperty("path")?.GetString();
 							var position = data.TryGetProperty("position")?.GetNullOrInt32();
 
-							var repo = getOrAddRepo();
+							var repo = GetOrAddRepo();
 							var commit = repo.CommentedCommits.SingleOrDefault(x => x.Sha == sha);
 							if (commit == null)
 							{
@@ -913,31 +913,31 @@ namespace GitHubDigestBuilder
 							var action = payload.GetProperty("action").GetString();
 							var pullRequestElement = payload.GetProperty("pull_request");
 							var number = pullRequestElement.GetProperty("number").GetInt32();
-							var pullRequest = getOrAddPullRequest(number);
+							var pullRequest = GetOrAddPullRequest(number);
 
 							pullRequest.FromBranch = new BranchData
 							{
 								Name = pullRequestElement.TryGetProperty("head", "ref")?.GetString() ?? "unknown",
-								Repo = createRepo(pullRequestElement.TryGetProperty("head", "repo", "full_name")?.GetString() ?? "unknown"),
+								Repo = CreateRepo(pullRequestElement.TryGetProperty("head", "repo", "full_name")?.GetString() ?? "unknown"),
 							};
 
 							pullRequest.ToBranch = new BranchData
 							{
 								Name = pullRequestElement.TryGetProperty("base", "ref")?.GetString() ?? "unknown",
-								Repo = createRepo(pullRequestElement.TryGetProperty("base", "repo", "full_name")?.GetString() ?? "unknown"),
+								Repo = CreateRepo(pullRequestElement.TryGetProperty("base", "repo", "full_name")?.GetString() ?? "unknown"),
 							};
 
-							setIssueBaseProperties(pullRequest, pullRequestElement);
+							SetIssueBaseProperties(pullRequest, pullRequestElement);
 
 							if (eventType == "PullRequestEvent" && action == "closed")
 							{
-								var eventData = addPullRequestEvent(pullRequest, pullRequestElement.GetProperty("merged").GetBoolean() ? "merged" : "closed");
+								var eventData = AddPullRequestEvent(pullRequest, pullRequestElement.GetProperty("merged").GetBoolean() ? "merged" : "closed");
 
 								if (pullRequestElement.TryGetProperty("merge_commit_sha")?.GetString() is string commitId)
 								{
 									eventData.Commit = new CommitData
 									{
-										Repo = createRepo(repoName),
+										Repo = CreateRepo(repoName),
 										Sha = commitId,
 									};
 								}
@@ -963,7 +963,7 @@ namespace GitHubDigestBuilder
 										FilePath = filePath,
 										Position = position,
 									};
-									addPullRequestEvent(pullRequest, "review-comment-created").Conversation = conversation;
+									AddPullRequestEvent(pullRequest, "review-comment-created").Conversation = conversation;
 								}
 
 								conversation.Comments.Add(new CommentData
@@ -976,7 +976,7 @@ namespace GitHubDigestBuilder
 							}
 							else
 							{
-								addPullRequestEvent(pullRequest, action);
+								AddPullRequestEvent(pullRequest, action);
 							}
 						}
 						else if (eventType == "IssuesEvent")
@@ -985,10 +985,10 @@ namespace GitHubDigestBuilder
 							var issueElement = payload.GetProperty("issue");
 							var number = issueElement.GetProperty("number").GetInt32();
 
-							var issue = getOrAddIssue(number);
-							setIssueBaseProperties(issue, issueElement);
+							var issue = GetOrAddIssue(number);
+							SetIssueBaseProperties(issue, issueElement);
 
-							addIssueEvent(issue, action);
+							AddIssueEvent(issue, action);
 						}
 						else if (eventType == "IssueCommentEvent")
 						{
@@ -998,7 +998,7 @@ namespace GitHubDigestBuilder
 
 							if (issueElement.TryGetProperty("pull_request") != null)
 							{
-								var pullRequest = getOrAddPullRequest(number);
+								var pullRequest = GetOrAddPullRequest(number);
 
 								if (action == "created")
 								{
@@ -1010,7 +1010,7 @@ namespace GitHubDigestBuilder
 									{
 										PullRequest = pullRequest,
 									};
-									addPullRequestEvent(pullRequest, "comment-created").Conversation = conversation;
+									AddPullRequestEvent(pullRequest, "comment-created").Conversation = conversation;
 
 									conversation.Comments.Add(new CommentData
 									{
@@ -1022,12 +1022,12 @@ namespace GitHubDigestBuilder
 								}
 								else
 								{
-									addWarning($"{eventType} action {action} not supported to {repoName}.");
+									AddWarning($"{eventType} action {action} not supported to {repoName}.");
 								}
 							}
 							else
 							{
-								var issue = getOrAddIssue(number);
+								var issue = GetOrAddIssue(number);
 
 								if (action == "created")
 								{
@@ -1039,7 +1039,7 @@ namespace GitHubDigestBuilder
 									{
 										Issue = issue,
 									};
-									addIssueEvent(issue, "comment-created").Conversation = conversation;
+									AddIssueEvent(issue, "comment-created").Conversation = conversation;
 
 									conversation.Comments.Add(new CommentData
 									{
@@ -1051,7 +1051,7 @@ namespace GitHubDigestBuilder
 								}
 								else
 								{
-									addWarning($"{eventType} action {action} not supported to {repoName}.");
+									AddWarning($"{eventType} action {action} not supported to {repoName}.");
 								}
 							}
 						}
@@ -1087,38 +1087,38 @@ namespace GitHubDigestBuilder
 
 								if (issueElement.TryGetProperty("pull_request") != null)
 								{
-									var pullRequest = getOrAddPullRequest(number);
-									setIssueBaseProperties(pullRequest, issueElement);
+									var pullRequest = GetOrAddPullRequest(number);
+									SetIssueBaseProperties(pullRequest, issueElement);
 
-									var eventData = addPullRequestEvent(pullRequest, action);
-									setIssueBaseEventProperties(eventData, payload);
+									var eventData = AddPullRequestEvent(pullRequest, action);
+									SetIssueBaseEventProperties(eventData, payload);
 
 									if (payload.TryGetProperty("commit_id")?.GetString() is string commitId)
 									{
 										eventData.Commit = new CommitData
 										{
-											Repo = createRepo(repoName),
+											Repo = CreateRepo(repoName),
 											Sha = commitId,
 										};
 									}
 								}
 								else
 								{
-									var issue = getOrAddIssue(number);
-									setIssueBaseProperties(issue, issueElement);
+									var issue = GetOrAddIssue(number);
+									SetIssueBaseProperties(issue, issueElement);
 
-									var eventData = addIssueEvent(issue, action);
-									setIssueBaseEventProperties(eventData, payload);
+									var eventData = AddIssueEvent(issue, action);
+									SetIssueBaseEventProperties(eventData, payload);
 								}
 							}
 						}
 						else
 						{
-							addWarning($"Unexpected {eventType} for {repoName}.");
+							AddWarning($"Unexpected {eventType} for {repoName}.");
 						}
 					}
 
-					void replaceList<T>(List<T> list, IEnumerable<T> items)
+					void ReplaceList<T>(List<T> list, IEnumerable<T> items)
 					{
 						var newList = items.ToList();
 						list.Clear();
@@ -1183,8 +1183,8 @@ namespace GitHubDigestBuilder
 							}
 						}
 
-						replaceList(repo.PullRequests, repo.PullRequests.OrderBy(x => x.Number));
-						replaceList(repo.Issues, repo.Issues.OrderBy(x => x.Number));
+						ReplaceList(repo.PullRequests, repo.PullRequests.OrderBy(x => x.Number));
+						ReplaceList(repo.Issues, repo.Issues.OrderBy(x => x.Number));
 
 						report.Repos.Add(repo);
 					}
