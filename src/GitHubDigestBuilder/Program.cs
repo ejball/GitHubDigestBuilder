@@ -36,7 +36,7 @@ namespace GitHubDigestBuilder
 			args.VerifyComplete();
 
 			// find config file
-			if (configFilePath == null)
+			if (configFilePath is null)
 				throw new ApplicationException(GetUsage());
 			configFilePath = Path.GetFullPath(configFilePath);
 			if (!File.Exists(configFilePath))
@@ -49,7 +49,7 @@ namespace GitHubDigestBuilder
 				new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
 
 			// determine date/time range in UTC
-			var timeZoneOffset = settings.TimeZoneOffsetHours != null ? TimeSpan.FromHours(settings.TimeZoneOffsetHours.Value) : DateTimeOffset.Now.Offset;
+			var timeZoneOffset = settings.TimeZoneOffsetHours is not null ? TimeSpan.FromHours(settings.TimeZoneOffsetHours.Value) : DateTimeOffset.Now.Offset;
 			var now = new DateTimeOffset(DateTime.UtcNow).ToOffset(timeZoneOffset);
 			var todayIso = now.Date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
 			var date = ParseDateArgument(dateString, now.Date);
@@ -58,20 +58,21 @@ namespace GitHubDigestBuilder
 			var endDateTimeUtc = startDateTimeUtc.AddDays(1.0);
 
 			// determine culture
-			var culture = settings.Culture == null ? CultureInfo.CurrentCulture : CultureInfo.GetCultureInfo(settings.Culture);
+			var culture = settings.Culture is null ? CultureInfo.CurrentCulture : CultureInfo.GetCultureInfo(settings.Culture);
 
 			// determine output file
-			if (outputDirectory != null)
+			if (outputDirectory is not null)
 				outputDirectory = Path.GetFullPath(outputDirectory);
-			if (outputDirectory == null)
-				outputDirectory = settings.OutputDirectory != null ? Path.Combine(configFileDirectory, settings.OutputDirectory) : Path.GetFullPath(".");
-			var outputFile = Path.Combine(outputDirectory ?? "", $"{dateIso}.html");
+			outputDirectory ??= settings.OutputDirectory is not null
+				? Path.Combine(configFileDirectory, settings.OutputDirectory)
+				: Path.GetFullPath(".");
+			var outputFile = Path.Combine(outputDirectory, $"{dateIso}.html");
 
 			// get GitHub settings
 			var githubs = new List<GitHubSettings>();
-			if (settings.GitHub != null)
+			if (settings.GitHub is not null)
 				githubs.Add(settings.GitHub);
-			if (settings.GitHubs != null)
+			if (settings.GitHubs is not null)
 				githubs.AddRange(settings.GitHubs);
 			if (githubs.Count == 0)
 				throw new ApplicationException("Configuration file must specify at least one github.");
@@ -116,7 +117,7 @@ namespace GitHubDigestBuilder
 					const int cacheVersion = 2;
 
 					using var sha1 = SHA1.Create();
-					var cacheDirectory = settings.CacheDirectory != null ? Path.GetFullPath(settings.CacheDirectory) : Path.Combine(Path.GetTempPath(), "GitHubDigestBuilderCache");
+					var cacheDirectory = settings.CacheDirectory is not null ? Path.GetFullPath(settings.CacheDirectory) : Path.Combine(Path.GetTempPath(), "GitHubDigestBuilderCache");
 					cacheDirectory = Path.Combine(cacheDirectory, BitConverter.ToString(sha1.ComputeHash(Encoding.UTF8.GetBytes($"{cacheVersion} {apiBase} {authToken}"))).Replace("-", "")[..16]);
 					Directory.CreateDirectory(cacheDirectory);
 
@@ -149,7 +150,7 @@ namespace GitHubDigestBuilder
 							}
 
 							// don't use the cache if we may have stopped early and we're asking for an older report
-							if (isLastPage == null || string.CompareOrdinal(dateIso, cacheDateIso) >= 0)
+							if (isLastPage is null || string.CompareOrdinal(dateIso, cacheDateIso) >= 0)
 								etag = cacheElement.GetProperty("etag").GetString();
 						}
 
@@ -165,14 +166,14 @@ namespace GitHubDigestBuilder
 							var request = new HttpRequestMessage(HttpMethod.Get, $"{apiBase}/{url}{pageParameter}");
 							foreach (var accept in accepts)
 								request.Headers.Accept.Add(MediaTypeWithQualityHeaderValue.Parse(accept));
-							if (pageNumber == 1 && etag != null)
+							if (pageNumber == 1 && etag is not null)
 								request.Headers.IfNoneMatch.Add(EntityTagHeaderValue.Parse(etag));
 
 							var response = await httpClient!.SendAsync(request);
 							if (isVerbose)
 								Console.WriteLine($"{request.RequestUri.AbsoluteUri} [{response.StatusCode}]");
 
-							if (pageNumber == 1 && etag != null && response.StatusCode == HttpStatusCode.NotModified)
+							if (pageNumber == 1 && etag is not null && response.StatusCode == HttpStatusCode.NotModified)
 							{
 								status = Enum.Parse<DownloadStatus>(cacheElement.GetProperty("status").GetString());
 								items.AddRange(cacheElement.GetProperty("items").EnumerateArray());
@@ -265,7 +266,7 @@ namespace GitHubDigestBuilder
 							if (!repoElement.GetProperty("private").GetBoolean() &&
 								!repoElement.GetProperty("archived").GetBoolean() &&
 								!repoElement.GetProperty("disabled").GetBoolean() &&
-								(topic == null || repoElement.GetProperty("topics").EnumerateArray().Select(x => x.GetString()).Any(x => x == topic)))
+								(topic is null || repoElement.GetProperty("topics").EnumerateArray().Select(x => x.GetString()).Any(x => x == topic)))
 							{
 								orgRepoNames.Add(repoElement.GetProperty("full_name").GetString());
 							}
@@ -327,7 +328,7 @@ namespace GitHubDigestBuilder
 					foreach (var exclude in github.Excludes ?? new List<FilterSettings>())
 					{
 						Regex CreateRegex(string value) =>
-							new Regex("^" + Regex.Escape(value).Replace(@"\*", ".*") + "$", RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
+							new("^" + Regex.Escape(value).Replace(@"\*", ".*") + "$", RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
 
 						switch (exclude)
 						{
@@ -378,7 +379,7 @@ namespace GitHubDigestBuilder
 								if (!isNetwork)
 								{
 									var pullRequestElement = payload.TryGetProperty("pull_request");
-									if (pullRequestElement != null)
+									if (pullRequestElement is not null)
 									{
 										var number = pullRequestElement.Value.TryGetProperty("number")?.GetInt32();
 										var targetRepo = pullRequestElement.Value.TryGetProperty("base", "repo", "full_name")?.GetString();
@@ -386,7 +387,7 @@ namespace GitHubDigestBuilder
 										var sourceBranch = pullRequestElement.Value.TryGetProperty("head", "ref")?.GetString();
 										var isOpen = pullRequestElement.Value.TryGetProperty("state")?.GetString() == "open";
 										var action = eventType == "PullRequestEvent" ? payload.TryGetProperty("action")?.GetString() : null;
-										if (number != null && targetRepo == repoName && sourceRepo != null && sourceBranch != null && (isOpen || action == "closed"))
+										if (number is not null && targetRepo == repoName && sourceRepo is not null && sourceBranch is not null && (isOpen || action == "closed"))
 										{
 											if (!pullRequestBranches.TryGetValue((sourceRepo, sourceBranch), out var pullRequestInfo))
 												pullRequestBranches[(sourceRepo, sourceBranch)] = pullRequestInfo = new List<(string, int, DateTime, string?)>();
@@ -502,14 +503,14 @@ namespace GitHubDigestBuilder
 					rawEvents = rawEvents.OrderBy(x => x.CreatedUtc).ToList();
 
 					RepoData CreateRepo(string name) =>
-						new RepoData
+						new()
 						{
 							WebBase = webBase,
 							Name = name,
 						};
 
 					UserData CreateUser(string name) =>
-						new UserData
+						new()
 						{
 							WebBase = webBase,
 							Name = name,
@@ -538,7 +539,7 @@ namespace GitHubDigestBuilder
 							actualRepoName ??= repoName;
 
 							var repo = repos.SingleOrDefault(x => x.Name == actualRepoName);
-							if (repo == null)
+							if (repo is null)
 							{
 								repo = CreateRepo(actualRepoName);
 								repos.Add(repo);
@@ -549,12 +550,12 @@ namespace GitHubDigestBuilder
 
 						BranchData GetOrAddBranch(string name)
 						{
-							if (name == null)
+							if (name is null)
 								throw new InvalidOperationException();
 
 							var repo = GetOrAddRepo();
 							var branch = repo.Branches.SingleOrDefault(x => x.Name == name);
-							if (branch == null)
+							if (branch is null)
 							{
 								branch = new BranchData
 								{
@@ -571,7 +572,7 @@ namespace GitHubDigestBuilder
 						{
 							var repo = GetOrAddRepo(actualRepoName);
 							var pullRequest = repo.PullRequests.SingleOrDefault(x => x.Number == number);
-							if (pullRequest == null)
+							if (pullRequest is null)
 							{
 								pullRequest = new PullRequestData
 								{
@@ -588,7 +589,7 @@ namespace GitHubDigestBuilder
 						{
 							var repo = GetOrAddRepo();
 							var issue = repo.Issues.SingleOrDefault(x => x.Number == number);
-							if (issue == null)
+							if (issue is null)
 							{
 								issue = new IssueData
 								{
@@ -604,11 +605,11 @@ namespace GitHubDigestBuilder
 						void SetIssueBaseProperties(IssueBaseData data, JsonElement element)
 						{
 							var title = element.GetProperty("title").GetString();
-							if (title != null)
+							if (title is not null)
 								data.Title = title;
 
 							var body = element.GetProperty("body").GetString();
-							if (body != null)
+							if (body is not null)
 								data.Body = body;
 						}
 
@@ -690,7 +691,7 @@ namespace GitHubDigestBuilder
 							const string branchRefPrefix = "refs/heads/";
 							var refName = payload.TryGetProperty("ref")?.GetString();
 							var commitCount = payload.TryGetProperty("size")?.GetInt32() ?? 0;
-							if (refName == null || !refName.StartsWith(branchRefPrefix, StringComparison.Ordinal))
+							if (refName is null || !refName.StartsWith(branchRefPrefix, StringComparison.Ordinal))
 							{
 								AddWarning($"Ignoring PushEvent to {refName} of {repoName}.");
 							}
@@ -722,7 +723,7 @@ namespace GitHubDigestBuilder
 									var pushRepo = branch?.Repo ?? CreateRepo(repoName);
 
 									var push = events.LastOrDefault() as PushEventData;
-									if (push == null ||
+									if (push is null ||
 										commitCount > 5 ||
 										push.Actor?.Name != actor.Name ||
 										push.Branch?.Name != branch?.Name ||
@@ -854,7 +855,7 @@ namespace GitHubDigestBuilder
 								var pageName = page.GetProperty("page_name").GetString();
 								var repo = GetOrAddRepo();
 								var wikiEvent = repo.WikiEvents.LastOrDefault();
-								if (wikiEvent == null || wikiEvent.Actor?.Name != actor.Name || wikiEvent.PageName != pageName)
+								if (wikiEvent is null || wikiEvent.Actor?.Name != actor.Name || wikiEvent.PageName != pageName)
 								{
 									wikiEvent = new WikiEventData
 									{
@@ -880,7 +881,7 @@ namespace GitHubDigestBuilder
 
 							var repo = GetOrAddRepo();
 							var commit = repo.CommentedCommits.SingleOrDefault(x => x.Sha == sha);
-							if (commit == null)
+							if (commit is null)
 							{
 								repo.CommentedCommits.Add(commit = new CommentedCommitData
 								{
@@ -890,7 +891,7 @@ namespace GitHubDigestBuilder
 							}
 
 							var conversation = commit.Conversations.SingleOrDefault(x => x.FilePath == filePath && x.Position == position?.ToString());
-							if (conversation == null)
+							if (conversation is null)
 							{
 								commit.Conversations.Add(conversation = new ConversationData
 								{
@@ -951,11 +952,11 @@ namespace GitHubDigestBuilder
 								var filePath = commentElement.GetProperty("path").GetString();
 								var positionBefore = commentElement.GetProperty("original_position").GetNullOrInt32();
 								var positionAfter = commentElement.GetProperty("position").GetNullOrInt32();
-								var position = positionBefore != null ? $"{positionBefore}" : $":{positionAfter}";
+								var position = positionBefore is not null ? $"{positionBefore}" : $":{positionAfter}";
 
-								var conversation = pullRequest.Events.OfType<PullRequestEventData>().Select(x => x.Conversation).Where(x => x != null)
+								var conversation = pullRequest.Events.OfType<PullRequestEventData>().Select(x => x.Conversation).Where(x => x is not null)
 									.SingleOrDefault(x => x!.FilePath == filePath && x.Position == position);
-								if (conversation == null)
+								if (conversation is null)
 								{
 									conversation = new ConversationData
 									{
@@ -996,7 +997,7 @@ namespace GitHubDigestBuilder
 							var issueElement = payload.GetProperty("issue");
 							var number = issueElement.GetProperty("number").GetInt32();
 
-							if (issueElement.TryGetProperty("pull_request") != null)
+							if (issueElement.TryGetProperty("pull_request") is not null)
 							{
 								var pullRequest = GetOrAddPullRequest(number);
 
@@ -1085,7 +1086,7 @@ namespace GitHubDigestBuilder
 								var issueElement = payload.GetProperty("issue");
 								var number = issueElement.GetProperty("number").GetInt32();
 
-								if (issueElement.TryGetProperty("pull_request") != null)
+								if (issueElement.TryGetProperty("pull_request") is not null)
 								{
 									var pullRequest = GetOrAddPullRequest(number);
 									SetIssueBaseProperties(pullRequest, issueElement);
@@ -1136,7 +1137,7 @@ namespace GitHubDigestBuilder
 								.OfType<PullRequestEventData>()
 								.Where(x => x.Kind == "closed" || x.Kind == "merged")
 								.OrderBy(x => x.Kind == "merged")
-								.ThenBy(x => x.Commit != null)
+								.ThenBy(x => x.Commit is not null)
 								.SkipLast(1)
 								.ToList())
 							{
@@ -1206,8 +1207,7 @@ namespace GitHubDigestBuilder
 				if (!isQuiet)
 					Console.WriteLine(outputFile);
 
-				if (outputDirectory != null)
-					Directory.CreateDirectory(outputDirectory);
+				Directory.CreateDirectory(outputDirectory);
 				await File.WriteAllTextAsync(outputFile, reportHtml);
 			}
 			catch (Exception exception)
@@ -1238,7 +1238,7 @@ namespace GitHubDigestBuilder
 
 		private static DateTime ParseDateArgument(string? value, DateTime today)
 		{
-			if (value == null || value.Equals("yesterday", StringComparison.InvariantCultureIgnoreCase))
+			if (value is null || value.Equals("yesterday", StringComparison.InvariantCultureIgnoreCase))
 				return today.AddDays(-1.0);
 			else if (value.Equals("today", StringComparison.InvariantCultureIgnoreCase))
 				return today;
