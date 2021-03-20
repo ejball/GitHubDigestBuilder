@@ -14,6 +14,10 @@ using System.Threading.Tasks;
 using ArgsReading;
 using GitHubDigestBuilder.Models;
 using GitHubDigestBuilder.Settings;
+using MailKit.Net.Smtp;
+using MailKit.Security;
+using MimeKit;
+using MimeKit.Text;
 using Scriban;
 using Scriban.Runtime;
 using YamlDotNet.Serialization;
@@ -33,6 +37,12 @@ namespace GitHubDigestBuilder
 			var isVerbose = args.ReadFlag("verbose") && !isQuiet;
 			var outputDirectory = args.ReadOption("output");
 			var cacheDirectory = args.ReadOption("cache");
+			var emailFrom = args.ReadOption("email-from");
+			var emailTo = args.ReadOption("email-to");
+			var emailSubject = args.ReadOption("email-subject");
+			var emailSmtp = args.ReadOption("email-smtp");
+			var emailUsername = args.ReadOption("email-user");
+			var emailPassword = args.ReadOption("email-pwd");
 			var configFilePath = args.ReadArgument();
 			args.VerifyComplete();
 
@@ -60,9 +70,21 @@ namespace GitHubDigestBuilder
 			// determine culture
 			var culture = settings.Culture is null ? CultureInfo.CurrentCulture : CultureInfo.GetCultureInfo(settings.Culture);
 
-			// determine output file
-			outputDirectory = Path.GetFullPath(outputDirectory ?? ".");
-			var outputFile = Path.Combine(outputDirectory, $"{dateIso}.html");
+			// determine output file or email
+			string? outputFile = null;
+			if (emailTo is not null)
+			{
+				if (outputDirectory is not null)
+					throw new ApplicationException("Cannot use both --email-to and --output.");
+				if (emailSmtp is null)
+					throw new ApplicationException("Missing required --email-smtp.");
+			}
+			else
+			{
+				// determine output file
+				outputDirectory = Path.GetFullPath(outputDirectory ?? ".");
+				outputFile = Path.Combine(outputDirectory, $"{dateIso}.html");
+			}
 
 			// get GitHub settings
 			var githubs = new List<GitHubSettings>();
@@ -1200,11 +1222,40 @@ namespace GitHubDigestBuilder
 
 				var reportHtml = template.Render(templateContext);
 
-				if (!isQuiet)
-					Console.WriteLine(outputFile);
+				if (outputFile is not null)
+				{
+					if (!isQuiet)
+						Console.WriteLine(outputFile);
 
-				Directory.CreateDirectory(outputDirectory);
-				await File.WriteAllTextAsync(outputFile, reportHtml);
+					Directory.CreateDirectory(outputDirectory);
+					await File.WriteAllTextAsync(outputFile, reportHtml);
+				}
+				else if (emailTo is not null)
+				{
+					if (!isQuiet)
+						Console.WriteLine($"Sending email to: {emailTo}");
+
+					var message = new MimeMessage();
+					message.From.Add(MailboxAddress.Parse(emailFrom ?? emailTo));
+					message.To.Add(MailboxAddress.Parse(emailTo));
+					message.Subject = emailSubject ?? ((FormattableString) $"GitHub Digest for {date:D}").ToString(culture);
+					message.Body = new TextPart(TextFormat.Html) { Text = reportHtml };
+
+					using var client = new SmtpClient();
+					await client.ConnectAsync(host: emailSmtp, port: 587, options: SecureSocketOptions.StartTls);
+					if (emailUsername is not null || emailPassword is not null)
+					{
+						await client.AuthenticateAsync(
+							userName: emailUsername ?? throw new ApplicationException("Missing --email-user."),
+							password: emailPassword ?? throw new ApplicationException("Missing --email-pwd."));
+					}
+					await client.SendAsync(message: message);
+					await client.DisconnectAsync(quit: true);
+				}
+				else
+				{
+					throw new InvalidOperationException();
+				}
 			}
 			catch (Exception exception)
 			{
@@ -1286,6 +1337,12 @@ namespace GitHubDigestBuilder
 				"  --verbose  (show GitHub API usage)",
 				"  --output <output-directory>  (default: .)",
 				"  --cache <cache-directory>  (default: %TEMP%\\GitHubDigestBuilderCache)",
+				"  --email-from <address>  (send email from)",
+				"  --email-to <address>  (send email to)",
+				"  --email-subject <text>  (email subject)",
+				"  --email-smtp <host>  (SMTP server)",
+				"  --email-user <text>  (SMTP username)",
+				"  --email-pwd <text>  (SMTP password)",
 				"Documentation: https://ejball.com/GitHubDigestBuilder/");
 
 		private enum DownloadStatus
