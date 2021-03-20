@@ -8,7 +8,7 @@ namespace GitHubDigestBuilder.Models
 
 		public RepoData? Repo { get; set; }
 
-		public List<EventData> Events { get; } = new List<EventData>();
+		public List<EventData> Events { get; } = new();
 
 		public string Url => $"{Repo!.Url}/tree/{Name}";
 	}

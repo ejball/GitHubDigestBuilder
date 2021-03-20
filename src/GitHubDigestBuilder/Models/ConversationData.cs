@@ -14,6 +14,6 @@ namespace GitHubDigestBuilder.Models
 
 		public string? Position { get; set; }
 
-		public List<CommentData> Comments { get; } = new List<CommentData>();
+		public List<CommentData> Comments { get; } = new();
 	}
 }

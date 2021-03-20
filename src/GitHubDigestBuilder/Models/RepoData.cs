@@ -9,19 +9,19 @@ namespace GitHubDigestBuilder.Models
 
 		public string? WebBase { get; set; }
 
-		public List<RepoEventData> RepoEvents { get; } = new List<RepoEventData>();
+		public List<RepoEventData> RepoEvents { get; } = new();
 
-		public List<PullRequestData> PullRequests { get; } = new List<PullRequestData>();
+		public List<PullRequestData> PullRequests { get; } = new();
 
-		public List<BranchData> Branches { get; } = new List<BranchData>();
+		public List<BranchData> Branches { get; } = new();
 
-		public List<CommentedCommitData> CommentedCommits { get; } = new List<CommentedCommitData>();
+		public List<CommentedCommitData> CommentedCommits { get; } = new();
 
-		public List<TagEventData> TagEvents { get; } = new List<TagEventData>();
+		public List<TagEventData> TagEvents { get; } = new();
 
-		public List<WikiEventData> WikiEvents { get; } = new List<WikiEventData>();
+		public List<WikiEventData> WikiEvents { get; } = new();
 
-		public List<IssueData> Issues { get; } = new List<IssueData>();
+		public List<IssueData> Issues { get; } = new();
 
 		public string? Org => Name?[..Name.IndexOf('/', StringComparison.Ordinal)];
 

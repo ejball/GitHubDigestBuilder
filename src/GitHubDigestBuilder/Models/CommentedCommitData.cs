@@ -8,7 +8,7 @@ namespace GitHubDigestBuilder.Models
 
 		public string? Sha { get; set; }
 
-		public List<ConversationData> Conversations { get; } = new List<ConversationData>();
+		public List<ConversationData> Conversations { get; } = new();
 
 		public string Url => $"{Repo!.Url}/commit/{Sha}";
 	}

@@ -12,6 +12,6 @@ namespace GitHubDigestBuilder.Models
 
 		public string? Body { get; set; }
 
-		public List<EventData> Events { get; } = new List<EventData>();
+		public List<EventData> Events { get; } = new();
 	}
 }

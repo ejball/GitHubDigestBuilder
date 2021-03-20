@@ -16,7 +16,7 @@ namespace GitHubDigestBuilder.Models
 
 		public int NewCommitCount { get; set; }
 
-		public List<CommitData> NewCommits { get; } = new List<CommitData>();
+		public List<CommitData> NewCommits { get; } = new();
 
 		public bool CanMerge { get; set; }
 
