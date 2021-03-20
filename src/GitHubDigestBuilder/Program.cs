@@ -32,6 +32,7 @@ namespace GitHubDigestBuilder
 			var isQuiet = args.ReadFlag("quiet");
 			var isVerbose = args.ReadFlag("verbose") && !isQuiet;
 			var outputDirectory = args.ReadOption("output");
+			var cacheDirectory = args.ReadOption("cache");
 			var configFilePath = args.ReadArgument();
 			args.VerifyComplete();
 
@@ -41,7 +42,6 @@ namespace GitHubDigestBuilder
 			configFilePath = Path.GetFullPath(configFilePath);
 			if (!File.Exists(configFilePath))
 				throw new ApplicationException("Configuration file not found.");
-			var configFileDirectory = Path.GetDirectoryName(configFilePath)!;
 
 			// deserialize config file
 			var settings = JsonSerializer.Deserialize<DigestSettings>(
@@ -61,11 +61,7 @@ namespace GitHubDigestBuilder
 			var culture = settings.Culture is null ? CultureInfo.CurrentCulture : CultureInfo.GetCultureInfo(settings.Culture);
 
 			// determine output file
-			if (outputDirectory is not null)
-				outputDirectory = Path.GetFullPath(outputDirectory);
-			outputDirectory ??= settings.OutputDirectory is not null
-				? Path.Combine(configFileDirectory, settings.OutputDirectory)
-				: Path.GetFullPath(".");
+			outputDirectory = Path.GetFullPath(outputDirectory ?? ".");
 			var outputFile = Path.Combine(outputDirectory, $"{dateIso}.html");
 
 			// get GitHub settings
@@ -117,7 +113,7 @@ namespace GitHubDigestBuilder
 					const int cacheVersion = 2;
 
 					using var sha1 = SHA1.Create();
-					var cacheDirectory = settings.CacheDirectory is not null ? Path.GetFullPath(settings.CacheDirectory) : Path.Combine(Path.GetTempPath(), "GitHubDigestBuilderCache");
+					cacheDirectory = cacheDirectory is not null ? Path.GetFullPath(cacheDirectory) : Path.Combine(Path.GetTempPath(), "GitHubDigestBuilderCache");
 					cacheDirectory = Path.Combine(cacheDirectory, BitConverter.ToString(sha1.ComputeHash(Encoding.UTF8.GetBytes($"{cacheVersion} {apiBase} {authToken}"))).Replace("-", "")[..16]);
 					Directory.CreateDirectory(cacheDirectory);
 
@@ -1288,6 +1284,8 @@ namespace GitHubDigestBuilder
 				"  --date <yyyy-MM-dd|today|yesterday>  (default: yesterday)",
 				"  --quiet  (no console output)",
 				"  --verbose  (show GitHub API usage)",
+				"  --output <output-directory>  (default: .)",
+				"  --cache <cache-directory>  (default: %TEMP%\\GitHubDigestBuilderCache)",
 				"Documentation: https://ejball.com/GitHubDigestBuilder/");
 
 		private enum DownloadStatus
