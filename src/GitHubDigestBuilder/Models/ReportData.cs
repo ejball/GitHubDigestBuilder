@@ -11,6 +11,8 @@ namespace GitHubDigestBuilder.Models
 
 		public DateTimeOffset Now { get; set; }
 
+		public bool IsEmail { get; set; }
+
 		public List<RepoData> Repos { get; } = new();
 
 		public List<string> Warnings { get; } = new();
