@@ -76,6 +76,8 @@ namespace GitHubDigestBuilder
 			{
 				if (outputDirectory is not null)
 					throw new ApplicationException("Cannot use both --email-to and --output.");
+				if (emailFrom is null)
+					throw new ApplicationException("Missing required --email-from.");
 				if (emailSmtp is null)
 					throw new ApplicationException("Missing required --email-smtp.");
 			}
@@ -101,6 +103,7 @@ namespace GitHubDigestBuilder
 				Date = date,
 				PreviousDate = date.AddDays(-1),
 				Now = now,
+				IsEmail = emailTo is not null,
 			};
 
 			try
@@ -1236,8 +1239,9 @@ namespace GitHubDigestBuilder
 						Console.WriteLine($"Sending email to: {emailTo}");
 
 					var message = new MimeMessage();
-					message.From.Add(MailboxAddress.Parse(emailFrom ?? emailTo));
-					message.To.Add(MailboxAddress.Parse(emailTo));
+					message.From.Add(MailboxAddress.Parse(emailFrom));
+					foreach (var to in emailTo.Split(';').Select(x => x.Trim()).Where(x => x.Length != 0).Select(MailboxAddress.Parse))
+						message.To.Add(to);
 					message.Subject = emailSubject ?? ((FormattableString) $"GitHub Digest for {date:D}").ToString(culture);
 					message.Body = new TextPart(TextFormat.Html) { Text = reportHtml };
 
