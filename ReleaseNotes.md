@@ -1,5 +1,10 @@
 # Release Notes
 
+## 0.6.0
+
+* Support sending digest via email.
+* Drop directory settings from configuration (use command-line arguments instead).
+
 ## 0.5.2
 
 * Avoid crash on unexpected data.
