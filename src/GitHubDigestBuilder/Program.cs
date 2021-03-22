@@ -56,7 +56,7 @@ namespace GitHubDigestBuilder
 			// deserialize config file
 			var settings = JsonSerializer.Deserialize<DigestSettings>(
 				ConvertYamlToJson(File.ReadAllText(configFilePath)),
-				new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+				new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? throw new ApplicationException("Invalid configuration.");
 
 			// determine date/time range in UTC
 			var timeZoneOffset = settings.TimeZoneOffsetHours is not null ? TimeSpan.FromHours(settings.TimeZoneOffsetHours.Value) : DateTimeOffset.Now.Offset;
@@ -166,7 +166,7 @@ namespace GitHubDigestBuilder
 							if (cacheDateIso == dateIso && string.CompareOrdinal(cacheDateIso, cacheTodayIso) < 0)
 							{
 								return new PagedDownloadResult(
-									Enum.Parse<DownloadStatus>(cacheElement.GetProperty("status").GetString()),
+									Enum.Parse<DownloadStatus>(cacheElement.GetProperty("status").GetString() ?? throw new InvalidOperationException("Missing status.")),
 									cacheElement.GetProperty("items").EnumerateArray().ToList());
 							}
 
@@ -192,11 +192,11 @@ namespace GitHubDigestBuilder
 
 							var response = await httpClient!.SendAsync(request);
 							if (isVerbose)
-								Console.WriteLine($"{request.RequestUri.AbsoluteUri} [{response.StatusCode}]");
+								Console.WriteLine($"{request.RequestUri!.AbsoluteUri} [{response.StatusCode}]");
 
 							if (pageNumber == 1 && etag is not null && response.StatusCode == HttpStatusCode.NotModified)
 							{
-								status = Enum.Parse<DownloadStatus>(cacheElement.GetProperty("status").GetString());
+								status = Enum.Parse<DownloadStatus>(cacheElement.GetProperty("status").GetString() ?? throw new InvalidOperationException("Missing status."));
 								items.AddRange(cacheElement.GetProperty("items").EnumerateArray());
 								break;
 							}
@@ -228,7 +228,7 @@ namespace GitHubDigestBuilder
 								throw new InvalidOperationException($"Unexpected status code: {response.StatusCode}");
 
 							if (pageNumber == 1)
-								etag = response.Headers.ETag.Tag;
+								etag = (response.Headers.ETag ?? throw new InvalidOperationException("Missing ETag.")).Tag;
 
 							await using var pageStream = await response.Content.ReadAsStreamAsync();
 							var pageDocument = await JsonDocument.ParseAsync(pageStream);
@@ -289,7 +289,7 @@ namespace GitHubDigestBuilder
 								!repoElement.GetProperty("disabled").GetBoolean() &&
 								(topic is null || repoElement.GetProperty("topics").EnumerateArray().Select(x => x.GetString()).Any(x => x == topic)))
 							{
-								orgRepoNames.Add(repoElement.GetProperty("full_name").GetString());
+								orgRepoNames.Add(repoElement.GetProperty("full_name").GetString() ?? throw new InvalidOperationException("Missing full_name."));
 							}
 						}
 
@@ -375,17 +375,17 @@ namespace GitHubDigestBuilder
 						var events = new List<RawEventData>();
 						var result = await LoadPagesAsync($"{sourceKind}/{sourceName}/events",
 							accepts: new[] { "application/vnd.github.v3+json" }, maxPageCount: 10,
-							isLastPage: page => page.EnumerateArray().Any(x => ParseDateTime(x.GetProperty("created_at").GetString()) < startDateTimeUtc));
+							isLastPage: page => page.EnumerateArray().Any(x => ParseDateTime(x.GetProperty("created_at").GetString() ?? throw new InvalidOperationException("Missing created_at.")) < startDateTimeUtc));
 
 						foreach (var eventElement in result.Elements)
 						{
-							var createdUtc = ParseDateTime(eventElement.GetProperty("created_at").GetString());
+							var createdUtc = ParseDateTime(eventElement.GetProperty("created_at").GetString() ?? throw new InvalidOperationException("Missing created_at."));
 							if (createdUtc >= startDateTimeUtc)
 							{
-								var eventId = eventElement.GetProperty("id").GetString();
+								var eventId = eventElement.GetProperty("id").GetString() ?? throw new InvalidOperationException("Missing id.");
 								var eventType = eventElement.GetProperty("type").GetString();
-								var actorName = eventElement.GetProperty("actor", "login").GetString();
-								var repoName = eventElement.GetProperty("repo", "name").GetString();
+								var actorName = eventElement.GetProperty("actor", "login").GetString() ?? throw new InvalidOperationException("Missing actor.login.");
+								var repoName = eventElement.GetProperty("repo", "name").GetString() ?? throw new InvalidOperationException("Missing repo.name.");
 								var payload = eventElement.GetProperty("payload");
 
 								if (!handledEventIds.Add(eventId))
@@ -445,15 +445,15 @@ namespace GitHubDigestBuilder
 						var events = new List<RawEventData>();
 						var result = await LoadPagesAsync($"repos/{repoName}/issues/events?per_page=100",
 							accepts: new[] { "application/vnd.github.v3+json" }, maxPageCount: 10,
-							isLastPage: page => page.EnumerateArray().Any(x => ParseDateTime(x.GetProperty("created_at").GetString()) < startDateTimeUtc));
+							isLastPage: page => page.EnumerateArray().Any(x => ParseDateTime(x.GetProperty("created_at").GetString() ?? throw new InvalidOperationException("Missing created_at.")) < startDateTimeUtc));
 
 						foreach (var eventElement in result.Elements)
 						{
-							var createdUtc = ParseDateTime(eventElement.GetProperty("created_at").GetString());
+							var createdUtc = ParseDateTime(eventElement.GetProperty("created_at").GetString() ?? throw new InvalidOperationException("Missing created_at."));
 							if (createdUtc >= startDateTimeUtc && createdUtc < endDateTimeUtc)
 							{
 								var eventId = "i" + eventElement.GetProperty("id").GetInt64();
-								var actorName = eventElement.GetProperty("actor", "login").GetString();
+								var actorName = eventElement.GetProperty("actor", "login").GetString() ?? throw new InvalidOperationException("Missing actor.login.");
 
 								if (!handledEventIds.Add(eventId))
 									continue;
@@ -814,7 +814,7 @@ namespace GitHubDigestBuilder
 							}
 							else if (refType == "branch")
 							{
-								var associatedPullRequests = GetAssociatedPullRequests(refName);
+								var associatedPullRequests = GetAssociatedPullRequests(refName ?? throw new InvalidOperationException("Missing ref."));
 								if (associatedPullRequests.Count != 0)
 								{
 									foreach (var associatedPullRequest in associatedPullRequests)
@@ -932,7 +932,7 @@ namespace GitHubDigestBuilder
 						}
 						else if (eventType == "PullRequestEvent" || eventType == "PullRequestReviewCommentEvent")
 						{
-							var action = payload.GetProperty("action").GetString();
+							var action = payload.GetProperty("action").GetString() ?? throw new InvalidOperationException("Missing action.");
 							var pullRequestElement = payload.GetProperty("pull_request");
 							var number = pullRequestElement.GetProperty("number").GetInt32();
 							var pullRequest = GetOrAddPullRequest(number);
@@ -1010,7 +1010,7 @@ namespace GitHubDigestBuilder
 							var issue = GetOrAddIssue(number);
 							SetIssueBaseProperties(issue, issueElement);
 
-							AddIssueEvent(issue, action);
+							AddIssueEvent(issue, action ?? throw new InvalidOperationException("Missing action."));
 						}
 						else if (eventType == "IssueCommentEvent")
 						{
@@ -1095,7 +1095,7 @@ namespace GitHubDigestBuilder
 						}
 						else if (eventType == "IssuesApiEvent")
 						{
-							var action = payload.GetProperty("event").GetString();
+							var action = payload.GetProperty("event").GetString() ?? throw new InvalidOperationException("Missing action.");
 							if (action != "comment_deleted" &&
 								action != "deployed" &&
 								action != "mentioned" &&
@@ -1230,7 +1230,7 @@ namespace GitHubDigestBuilder
 					if (!isQuiet)
 						Console.WriteLine(outputFile);
 
-					Directory.CreateDirectory(outputDirectory);
+					Directory.CreateDirectory(outputDirectory!);
 					await File.WriteAllTextAsync(outputFile, reportHtml);
 				}
 				else if (emailTo is not null)
@@ -1261,7 +1261,7 @@ namespace GitHubDigestBuilder
 					throw new InvalidOperationException();
 				}
 			}
-			catch (Exception exception)
+			catch (Exception exception) when (outputFile is not null)
 			{
 				var templateText = GetEmbeddedResourceText("GitHubDigestBuilder.exception.scriban-html");
 				var template = Template.Parse(templateText);
