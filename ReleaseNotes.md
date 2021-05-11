@@ -1,5 +1,12 @@
 # Release Notes
 
+## 0.7.0
+
+* Try to avoid error when `pull_request.body` is null.
+* Basic support for `PullRequestReviewEvent`.
+* Support `convert_to_draft`.
+* Don't report PR/issue connections.
+
 ## 0.6.0
 
 * Support sending digest via email.
