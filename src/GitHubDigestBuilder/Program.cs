@@ -930,7 +930,7 @@ namespace GitHubDigestBuilder
 								Body = data.GetProperty("body").GetString(),
 							});
 						}
-						else if (eventType == "PullRequestEvent" || eventType == "PullRequestReviewCommentEvent")
+						else if (eventType == "PullRequestEvent" || eventType == "PullRequestReviewEvent" || eventType == "PullRequestReviewCommentEvent")
 						{
 							var action = payload.GetProperty("action").GetString() ?? throw new InvalidOperationException("Missing action.");
 							var pullRequestElement = payload.GetProperty("pull_request");
@@ -964,37 +964,48 @@ namespace GitHubDigestBuilder
 									};
 								}
 							}
-							else if (eventType == "PullRequestReviewCommentEvent" && action == "created")
+							else if (eventType == "PullRequestReviewCommentEvent")
 							{
-								var commentElement = payload.GetProperty("comment");
-								var commentId = commentElement.GetProperty("id").GetInt32();
-								var commentBody = commentElement.GetProperty("body").GetString();
-
-								var filePath = commentElement.GetProperty("path").GetString();
-								var positionBefore = commentElement.GetProperty("original_position").GetNullOrInt32();
-								var positionAfter = commentElement.GetProperty("position").GetNullOrInt32();
-								var position = positionBefore is not null ? $"{positionBefore}" : $":{positionAfter}";
-
-								var conversation = pullRequest.Events.OfType<PullRequestEventData>().Select(x => x.Conversation).Where(x => x is not null)
-									.SingleOrDefault(x => x!.FilePath == filePath && x.Position == position);
-								if (conversation is null)
+								if (action == "created")
 								{
-									conversation = new ConversationData
+									var commentElement = payload.GetProperty("comment");
+									var commentId = commentElement.GetProperty("id").GetInt32();
+									var commentBody = commentElement.GetProperty("body").GetString();
+
+									var filePath = commentElement.GetProperty("path").GetString();
+									var positionBefore = commentElement.GetProperty("original_position").GetNullOrInt32();
+									var positionAfter = commentElement.GetProperty("position").GetNullOrInt32();
+									var position = positionBefore is not null ? $"{positionBefore}" : $":{positionAfter}";
+
+									var conversation = pullRequest.Events.OfType<PullRequestEventData>().Select(x => x.Conversation).Where(x => x is not null)
+										.SingleOrDefault(x => x!.FilePath == filePath && x.Position == position);
+									if (conversation is null)
 									{
-										PullRequest = pullRequest,
-										FilePath = filePath,
-										Position = position,
-									};
-									AddPullRequestEvent(pullRequest, "review-comment-created").Conversation = conversation;
-								}
+										conversation = new ConversationData
+										{
+											PullRequest = pullRequest,
+											FilePath = filePath,
+											Position = position,
+										};
+										AddPullRequestEvent(pullRequest, "review-comment-created").Conversation = conversation;
+									}
 
-								conversation.Comments.Add(new CommentData
+									conversation.Comments.Add(new CommentData
+									{
+										Conversation = conversation,
+										Actor = actor,
+										CommentId = commentId,
+										Body = commentBody,
+									});
+								}
+								else
 								{
-									Conversation = conversation,
-									Actor = actor,
-									CommentId = commentId,
-									Body = commentBody,
-								});
+									AddPullRequestEvent(pullRequest, $"review-comment-{action}");
+								}
+							}
+							else if (eventType == "PullRequestReviewEvent")
+							{
+								AddPullRequestEvent(pullRequest, $"review-{action}");
 							}
 							else
 							{
