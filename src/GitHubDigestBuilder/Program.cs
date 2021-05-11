@@ -1007,7 +1007,7 @@ namespace GitHubDigestBuilder
 							{
 								AddPullRequestEvent(pullRequest, $"review-{action}");
 							}
-							else
+							else if (action != "connected")
 							{
 								AddPullRequestEvent(pullRequest, action);
 							}
