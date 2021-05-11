@@ -155,7 +155,7 @@ a:hover, a:focus { text-decoration: none }
 <li>{{ event | push_event }}</li>
 {{ else if event.kind == 'opened' ~}}
 <li class="text-truncate">{{ event.actor | user_link }} opened pull request</li>
-{{ if !pull_request.body.empty? ~}}
+{{ if pull_request.body && !pull_request.body.empty? ~}}
 <li class="text-truncate">{{ event.actor | user_link }} {{ start_link pull_request.url "text-secondary" }}&#x21D2;</a> {{ pull_request.body | html.escape }}</li>
 {{ end # if ~}}
 {{ else if event.kind == 'reopened' ~}}
