@@ -1,5 +1,9 @@
 # Release Notes
 
+## 0.7.1
+
+* Don't report creating a PR review.
+
 ## 0.7.0
 
 * Try to avoid error when `pull_request.body` is null.

@@ -1005,7 +1005,8 @@ namespace GitHubDigestBuilder
 							}
 							else if (eventType == "PullRequestReviewEvent")
 							{
-								AddPullRequestEvent(pullRequest, $"review-{action}");
+								if (action != "created")
+									AddPullRequestEvent(pullRequest, $"review-{action}");
 							}
 							else if (action != "connected")
 							{
