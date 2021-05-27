@@ -1109,6 +1109,7 @@ namespace GitHubDigestBuilder
 						{
 							var action = payload.GetProperty("event").GetString() ?? throw new InvalidOperationException("Missing action.");
 							if (action != "comment_deleted" &&
+								action != "connected" &&
 								action != "deployed" &&
 								action != "mentioned" &&
 								action != "head_ref_deleted" &&

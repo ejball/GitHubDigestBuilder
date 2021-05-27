@@ -1,5 +1,9 @@
 # Release Notes
 
+## 0.7.2
+
+* Don't report linking issues or PRs.
+
 ## 0.7.1
 
 * Don't report creating a PR review.
