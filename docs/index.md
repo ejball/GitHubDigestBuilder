@@ -74,6 +74,14 @@ Without this command-line option, the digest for yesterday is created. You can g
 > GitHubDigestBuilder digest.yaml --date 2020-02-02
 ```
 
+### `--email-from`, `--email-to`, `--email-subject`, `--email-smtp`, `--email-user`, `--email-pwd`
+
+When these command-line options are specified, the tool uses SMTP to send the digest as an email message. The email subject is optional.
+
+### `--cache`
+
+Specifies the cache directory. Without this command-line option, the cache is stored in a subdirectory of the standard temporary directory called `GitHubDigestBuilderCache`.
+
 ## Configuration
 
 The configuration file is primarily used to indicate which GitHub repositories you'd like to monitor. It can also be used to monitor individual users, exclude events from individual users, etc. For example:
