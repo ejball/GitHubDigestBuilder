@@ -18,7 +18,7 @@ The goal of the digest is to increase your awareness of GitHub activity. It does
 
 GitHubDigestBuilder is a .NET Core Tool, so the simplest way to install it is globally via:
 
-```
+```shell
 > dotnet tool install -g GitHubDigestBuilder
 ```
 
@@ -26,7 +26,7 @@ GitHubDigestBuilder is a .NET Core Tool, so the simplest way to install it is gl
 
 Once installed, invoke GitHubDigestBuilder with the path to your configuration file as the first argument.
 
-```
+```shell
 > GitHubDigestBuilder digest.yaml
 ```
 
@@ -36,7 +36,7 @@ The following command-line options are also supported:
 
 You can use this tool without a GitHub [personal access token](https://github.com/settings/tokens) (PAT), but the GitHub event API is extremely rate-limited without one. You can provide the PAT via the `--auth` command-line option or via the `authToken` or `authTokenEnv` configuration fields described later. The *public_repo* permission should be sufficient.
 
-```
+```shell
 > GitHubDigestBuilder digest.yaml --auth 1234567890123456789012345678901234567890
 ```
 
@@ -46,7 +46,7 @@ If multiple `githubs` are provided in the configuration, add an `--auth` option 
 
 Use this option to specify an output directory relative to the current directory. The actual output file is named after the digest date, e.g. `2020-02-02.html`.
 
-```
+```shell
 > GitHubDigestBuilder digest.yaml --verbose
 ```
 
@@ -54,7 +54,7 @@ Use this option to specify an output directory relative to the current directory
 
 If you want to see what GitHub APIs are being used, specify this option.
 
-```
+```shell
 > GitHubDigestBuilder digest.yaml --verbose
 ```
 
@@ -62,7 +62,7 @@ If you want to see what GitHub APIs are being used, specify this option.
 
 The tool normally writes the path of the output file to the console; use this option to suppress that.
 
-```
+```shell
 > GitHubDigestBuilder digest.yaml --quiet
 ```
 
@@ -70,7 +70,7 @@ The tool normally writes the path of the output file to the console; use this op
 
 Without this command-line option, the digest for yesterday is created. You can generate digests for older dates, but GitHub only provides access to the most recent events, so the tool is most reliable when generating a digest for yesterday, ideally early in the morning before much activity happens today.
 
-```
+```shell
 > GitHubDigestBuilder digest.yaml --date 2020-02-02
 ```
 
