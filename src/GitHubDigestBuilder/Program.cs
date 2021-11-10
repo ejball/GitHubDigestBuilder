@@ -1108,8 +1108,12 @@ namespace GitHubDigestBuilder
 						else if (eventType == "IssuesApiEvent")
 						{
 							var action = payload.GetProperty("event").GetString() ?? throw new InvalidOperationException("Missing action.");
-							if (action != "comment_deleted" &&
-								action != "connected" &&
+							if (action != "auto_merge_disabled" &&
+								action != "auto_merge_enabled" &&
+								action != "auto_rebase_enabled" &&
+								action != "auto_squash_enabled" &&
+								action != "comment_deleted" &&
+							    action != "connected" &&
 								action != "deployed" &&
 								action != "mentioned" &&
 								action != "head_ref_deleted" &&
