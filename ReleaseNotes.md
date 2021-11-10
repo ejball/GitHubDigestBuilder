@@ -1,5 +1,9 @@
 # Release Notes
 
+## 0.7.3
+
+* Hide some uninteresting actions.
+
 ## 0.7.2
 
 * Don't report linking issues or PRs.
