@@ -16,11 +16,11 @@ namespace GitHubDigestBuilder.Models
 		{
 			get
 			{
-				if (Conversation!.Commit is CommentedCommitData commit)
+				if (Conversation!.Commit is { } commit)
 					return $"{commit.Url}#{(Conversation.FilePath == null ? "commitcomment-" : "r")}{CommentId}";
-				else if (Conversation.PullRequest is PullRequestData pullRequest)
+				else if (Conversation.PullRequest is { } pullRequest)
 					return $"{pullRequest.Url}#{(Conversation.FilePath == null ? "issuecomment-" : "discussion_r")}{CommentId}";
-				else if (Conversation.Issue is IssueData issue)
+				else if (Conversation.Issue is { } issue)
 					return $"{issue.Url}#{(Conversation.FilePath == null ? "issuecomment-" : "discussion_r")}{CommentId}";
 				else
 					throw new InvalidOperationException();

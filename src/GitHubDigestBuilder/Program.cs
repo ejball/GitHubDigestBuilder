@@ -31,7 +31,7 @@ namespace GitHubDigestBuilder
 			// read command-line arguments
 			var dateString = args.ReadOption("date");
 			var authTokens = new Queue<string>();
-			while (args.ReadOption("auth") is string authToken)
+			while (args.ReadOption("auth") is { } authToken)
 				authTokens.Enqueue(authToken);
 			var isQuiet = args.ReadFlag("quiet");
 			var isVerbose = args.ReadFlag("verbose") && !isQuiet;
@@ -122,7 +122,7 @@ namespace GitHubDigestBuilder
 
 					string webBase;
 					string apiBase;
-					if (github.Enterprise is string enterprise)
+					if (github.Enterprise is { } enterprise)
 					{
 						webBase = enterprise;
 						if (!webBase.StartsWith("http://", StringComparison.OrdinalIgnoreCase) && !webBase.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
@@ -175,7 +175,7 @@ namespace GitHubDigestBuilder
 								etag = cacheElement.GetProperty("etag").GetString();
 						}
 
-						if (rateLimitResetUtc is object)
+						if (rateLimitResetUtc is not null)
 							return new PagedDownloadResult(DownloadStatus.RateLimited);
 
 						var status = DownloadStatus.TooMuchActivity;
@@ -311,15 +311,15 @@ namespace GitHubDigestBuilder
 					{
 						switch (settingsRepo)
 						{
-							case { Name: string name, User: null, Org: null, Topic: null }:
+							case { Name: { } name, User: null, Org: null, Topic: null }:
 								AddRepoForSource(name, sourceIndex);
 								break;
 
-							case { Name: null, User: string user, Org: null }:
+							case { Name: null, User: { } user, Org: null }:
 								await AddReposForSource("users", user, sourceIndex, topic: settingsRepo.Topic);
 								break;
 
-							case { Name: null, User: null, Org: string org }:
+							case { Name: null, User: null, Org: { } org }:
 								await AddReposForSource("orgs", org, sourceIndex, topic: settingsRepo.Topic);
 								break;
 
@@ -334,7 +334,7 @@ namespace GitHubDigestBuilder
 					{
 						switch (settingsUser)
 						{
-							case { Name: string name }:
+							case { Name: { } name }:
 								if (!sourceUserNames.Contains(name))
 									sourceUserNames.Add(name);
 								break;
@@ -353,11 +353,11 @@ namespace GitHubDigestBuilder
 
 						switch (exclude)
 						{
-							case { User: string user, Repo: null }:
+							case { User: { } user, Repo: null }:
 								usersToExclude.Add(CreateRegex(user));
 								break;
 
-							case { User: null, Repo: string repo }:
+							case { User: null, Repo: { } repo }:
 								reposToExclude.Add(CreateRegex(repo));
 								break;
 
@@ -637,30 +637,30 @@ namespace GitHubDigestBuilder
 						void SetIssueBaseEventProperties(IssueBaseEventData eventData, JsonElement payloadElement)
 						{
 							if ((payloadElement.TryGetProperty("review_requester", "login")?.GetString() ??
-								payloadElement.TryGetProperty("assigner", "login")?.GetString()) is string sourceUserName)
+								payloadElement.TryGetProperty("assigner", "login")?.GetString()) is { } sourceUserName)
 							{
 								eventData.SourceUser = CreateUser(sourceUserName);
 							}
 
 							if ((payloadElement.TryGetProperty("requested_reviewer", "login")?.GetString() ??
-								payloadElement.TryGetProperty("assignee", "login")?.GetString()) is string targetUserName)
+								payloadElement.TryGetProperty("assignee", "login")?.GetString()) is { } targetUserName)
 							{
 								eventData.TargetUser = CreateUser(targetUserName);
 							}
 
-							if (payloadElement.TryGetProperty("requested_team", "html_url")?.GetString() is string targetTeamUrl)
+							if (payloadElement.TryGetProperty("requested_team", "html_url")?.GetString() is { } targetTeamUrl)
 								eventData.TargetTeam = CreateTeam(targetTeamUrl);
 
-							if (payloadElement.TryGetProperty("label", "name")?.GetString() is string labelName)
+							if (payloadElement.TryGetProperty("label", "name")?.GetString() is { } labelName)
 								eventData.LabelName = labelName;
 
-							if (payloadElement.TryGetProperty("milestone", "title")?.GetString() is string milestoneTitle)
+							if (payloadElement.TryGetProperty("milestone", "title")?.GetString() is { } milestoneTitle)
 								eventData.MilestoneTitle = milestoneTitle;
 
-							if (payloadElement.TryGetProperty("rename", "from")?.GetString() is string renameFrom)
+							if (payloadElement.TryGetProperty("rename", "from")?.GetString() is { } renameFrom)
 								eventData.RenameFrom = renameFrom;
 
-							if (payloadElement.TryGetProperty("rename", "to")?.GetString() is string renameTo)
+							if (payloadElement.TryGetProperty("rename", "to")?.GetString() is { } renameTo)
 								eventData.RenameTo = renameTo;
 						}
 
@@ -955,7 +955,7 @@ namespace GitHubDigestBuilder
 							{
 								var eventData = AddPullRequestEvent(pullRequest, pullRequestElement.GetProperty("merged").GetBoolean() ? "merged" : "closed");
 
-								if (pullRequestElement.TryGetProperty("merge_commit_sha")?.GetString() is string commitId)
+								if (pullRequestElement.TryGetProperty("merge_commit_sha")?.GetString() is { } commitId)
 								{
 									eventData.Commit = new CommitData
 									{
@@ -1132,7 +1132,7 @@ namespace GitHubDigestBuilder
 									var eventData = AddPullRequestEvent(pullRequest, action);
 									SetIssueBaseEventProperties(eventData, payload);
 
-									if (payload.TryGetProperty("commit_id")?.GetString() is string commitId)
+									if (payload.TryGetProperty("commit_id")?.GetString() is { } commitId)
 									{
 										eventData.Commit = new CommitData
 										{
