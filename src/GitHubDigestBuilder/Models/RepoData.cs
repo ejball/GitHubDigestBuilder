@@ -1,6 +1,3 @@
-using System;
-using System.Collections.Generic;
-
 namespace GitHubDigestBuilder.Models
 {
 	internal sealed class RepoData

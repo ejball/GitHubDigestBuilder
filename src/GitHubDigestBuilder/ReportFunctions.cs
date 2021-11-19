@@ -1,4 +1,3 @@
-using System;
 using Scriban;
 
 namespace GitHubDigestBuilder

@@ -1,5 +1,3 @@
-using System.Collections.Generic;
-
 namespace GitHubDigestBuilder.Settings
 {
 	public sealed class DigestSettings

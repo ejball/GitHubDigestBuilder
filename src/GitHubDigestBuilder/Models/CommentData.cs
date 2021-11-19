@@ -1,5 +1,3 @@
-using System;
-
 namespace GitHubDigestBuilder.Models
 {
 	internal sealed class CommentData
