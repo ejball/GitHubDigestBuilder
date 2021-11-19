@@ -1,7 +1,6 @@
-namespace GitHubDigestBuilder.Models
+namespace GitHubDigestBuilder.Models;
+
+internal sealed class IssueData : IssueBaseData
 {
-	internal sealed class IssueData : IssueBaseData
-	{
-		public string Url => $"{Repo!.Url}/issues/{Number}";
-	}
+	public string Url => $"{Repo!.Url}/issues/{Number}";
 }

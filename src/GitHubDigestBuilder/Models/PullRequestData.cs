@@ -1,11 +1,10 @@
-namespace GitHubDigestBuilder.Models
+namespace GitHubDigestBuilder.Models;
+
+internal sealed class PullRequestData : IssueBaseData
 {
-	internal sealed class PullRequestData : IssueBaseData
-	{
-		public BranchData? FromBranch { get; set; }
+	public BranchData? FromBranch { get; set; }
 
-		public BranchData? ToBranch { get; set; }
+	public BranchData? ToBranch { get; set; }
 
-		public string Url => $"{Repo!.Url}/pull/{Number}";
-	}
+	public string Url => $"{Repo!.Url}/pull/{Number}";
 }

@@ -1,7 +1,6 @@
-namespace GitHubDigestBuilder.Models
+namespace GitHubDigestBuilder.Models;
+
+internal sealed class TagEventData : EventData
 {
-	internal sealed class TagEventData : EventData
-	{
-		public TagData? Tag { get; set; }
-	}
+	public TagData? Tag { get; set; }
 }

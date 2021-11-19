@@ -1,6 +1,5 @@
-namespace GitHubDigestBuilder.Models
+namespace GitHubDigestBuilder.Models;
+
+internal sealed class IssueEventData : IssueBaseEventData
 {
-	internal sealed class IssueEventData : IssueBaseEventData
-	{
-	}
 }

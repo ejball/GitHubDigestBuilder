@@ -1,6 +1,5 @@
-namespace GitHubDigestBuilder.Models
+namespace GitHubDigestBuilder.Models;
+
+internal sealed class RepoEventData : EventData
 {
-	internal sealed class RepoEventData : EventData
-	{
-	}
 }

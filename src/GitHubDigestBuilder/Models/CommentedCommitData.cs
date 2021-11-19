@@ -1,13 +1,12 @@
-namespace GitHubDigestBuilder.Models
+namespace GitHubDigestBuilder.Models;
+
+internal sealed class CommentedCommitData
 {
-	internal sealed class CommentedCommitData
-	{
-		public RepoData? Repo { get; set; }
+	public RepoData? Repo { get; set; }
 
-		public string? Sha { get; set; }
+	public string? Sha { get; set; }
 
-		public List<ConversationData> Conversations { get; } = new();
+	public List<ConversationData> Conversations { get; } = new();
 
-		public string Url => $"{Repo!.Url}/commit/{Sha}";
-	}
+	public string Url => $"{Repo!.Url}/commit/{Sha}";
 }

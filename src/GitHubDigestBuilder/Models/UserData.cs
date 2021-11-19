@@ -1,11 +1,10 @@
-namespace GitHubDigestBuilder.Models
+namespace GitHubDigestBuilder.Models;
+
+internal sealed class UserData
 {
-	internal sealed class UserData
-	{
-		public string? WebBase { get; set; }
+	public string? WebBase { get; set; }
 
-		public string? Name { get; set; }
+	public string? Name { get; set; }
 
-		public string Url => $"{WebBase}/{Name}";
-	}
+	public string Url => $"{WebBase}/{Name}";
 }

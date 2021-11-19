@@ -1,17 +1,16 @@
-namespace GitHubDigestBuilder.Models
+namespace GitHubDigestBuilder.Models;
+
+internal sealed class ConversationData
 {
-	internal sealed class ConversationData
-	{
-		public CommentedCommitData? Commit { get; set; }
+	public CommentedCommitData? Commit { get; set; }
 
-		public PullRequestData? PullRequest { get; set; }
+	public PullRequestData? PullRequest { get; set; }
 
-		public IssueData? Issue { get; set; }
+	public IssueData? Issue { get; set; }
 
-		public string? FilePath { get; set; }
+	public string? FilePath { get; set; }
 
-		public string? Position { get; set; }
+	public string? Position { get; set; }
 
-		public List<CommentData> Comments { get; } = new();
-	}
+	public List<CommentData> Comments { get; } = new();
 }

@@ -1,11 +1,10 @@
-namespace GitHubDigestBuilder.Models
+namespace GitHubDigestBuilder.Models;
+
+internal sealed class TagData
 {
-	internal sealed class TagData
-	{
-		public string? Name { get; set; }
+	public string? Name { get; set; }
 
-		public RepoData? Repo { get; set; }
+	public RepoData? Repo { get; set; }
 
-		public string Url => $"{Repo!.Url}/releases/tag/{Name}";
-	}
+	public string Url => $"{Repo!.Url}/releases/tag/{Name}";
 }

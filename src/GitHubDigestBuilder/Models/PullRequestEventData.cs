@@ -1,7 +1,6 @@
-namespace GitHubDigestBuilder.Models
+namespace GitHubDigestBuilder.Models;
+
+internal sealed class PullRequestEventData : IssueBaseEventData
 {
-	internal sealed class PullRequestEventData : IssueBaseEventData
-	{
-		public CommitData? Commit { get; set; }
-	}
+	public CommitData? Commit { get; set; }
 }

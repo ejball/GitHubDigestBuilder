@@ -1,7 +1,6 @@
-namespace GitHubDigestBuilder.Models
+namespace GitHubDigestBuilder.Models;
+
+internal sealed class BranchEventData : EventData
 {
-	internal sealed class BranchEventData : EventData
-	{
-		public BranchData? Branch { get; set; }
-	}
+	public BranchData? Branch { get; set; }
 }
