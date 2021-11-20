@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
@@ -18,7 +18,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="ArgsReading" Version="2.2.0" />
+    <PackageReference Include="ArgsReading" Version="2.3.2" />
     <PackageReference Include="MailKit" Version="2.11.1" />
     <PackageReference Include="Scriban" Version="2.1.1" />
     <PackageReference Include="YamlDotNet" Version="8.0.0" />

@@ -5,7 +5,6 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using ArgsReading;
 using GitHubDigestBuilder.Models;
 using GitHubDigestBuilder.Settings;
 using MailKit.Net.Smtp;
