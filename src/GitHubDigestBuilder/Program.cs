@@ -177,18 +177,18 @@ public static class Program
 					for (var pageNumber = 1; pageNumber <= maxPageCount; pageNumber++)
 					{
 						var pageParameter = pageNumber == 1 ? "" : $"{(url.Contains('?') ? '&' : '?')}page={pageNumber}";
-						var request = new HttpRequestMessage(HttpMethod.Get, $"{apiBase}/{url}{pageParameter}");
-						foreach (var accept in accepts)
-							request.Headers.Accept.Add(MediaTypeWithQualityHeaderValue.Parse(accept));
-						if (pageNumber == 1 && etag is not null)
-							request.Headers.IfNoneMatch.Add(EntityTagHeaderValue.Parse(etag));
 
 						HttpResponseMessage response;
-
 						bool shouldRetry;
 						do
 						{
 							shouldRetry = false;
+
+							var request = new HttpRequestMessage(HttpMethod.Get, $"{apiBase}/{url}{pageParameter}");
+							foreach (var accept in accepts)
+								request.Headers.Accept.Add(MediaTypeWithQualityHeaderValue.Parse(accept));
+							if (pageNumber == 1 && etag is not null)
+								request.Headers.IfNoneMatch.Add(EntityTagHeaderValue.Parse(etag));
 							response = await httpClient!.SendAsync(request);
 							if (isVerbose)
 								Console.WriteLine($"{request.RequestUri!.AbsoluteUri}{(request.Headers.IfNoneMatch.Count == 0 ? "" : " (IfNoneMatch)")} [{response.StatusCode}]");

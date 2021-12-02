@@ -1,16 +1,9 @@
 # Release Notes
 
-## 0.7.6
+## 0.7.7
 
 * Support [secondary rate limits](https://docs.github.com/en/rest/overview/resources-in-the-rest-api#secondary-rate-limits).
-
-## 0.7.5
-
-* Show headers and body of unexpected forbidden.
-
-## 0.7.4
-
-* Treat forbidden as not found instead of crashing.
+* Show headers and body of unexpected status codes.
 
 ## 0.7.3
 
