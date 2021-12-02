@@ -194,9 +194,6 @@ public static class Program
 							break;
 						}
 
-						if (response.StatusCode == HttpStatusCode.NotFound)
-							return new PagedDownloadResult(DownloadStatus.NotFound);
-
 						if (response.StatusCode == HttpStatusCode.Forbidden &&
 						    response.Headers.TryGetValues("X-RateLimit-Remaining", out var rateLimitRemainingValues) &&
 						    rateLimitRemainingValues.FirstOrDefault() == "0" &&
@@ -213,6 +210,9 @@ public static class Program
 
 							return new PagedDownloadResult(DownloadStatus.RateLimited);
 						}
+
+						if (response.StatusCode == HttpStatusCode.NotFound || response.StatusCode == HttpStatusCode.Forbidden)
+							return new PagedDownloadResult(DownloadStatus.NotFound);
 
 						if (response.StatusCode == HttpStatusCode.Unauthorized)
 							throw new ApplicationException("GitHub API returned 401 Unauthorized. Ensure that your auth token is set to a valid personal access token.");

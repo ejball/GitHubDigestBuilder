@@ -1,5 +1,9 @@
 # Release Notes
 
+## 0.7.4
+
+* Treat forbidden as not found instead of crashing.
+
 ## 0.7.3
 
 * Hide some uninteresting actions.
