@@ -48,7 +48,7 @@ public static class Program
 
 		// deserialize config file
 		var settings = JsonSerializer.Deserialize<DigestSettings>(
-			ConvertYamlToJson(File.ReadAllText(configFilePath)),
+			ConvertYamlToJson(await File.ReadAllTextAsync(configFilePath)),
 			new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? throw new ApplicationException("Invalid configuration.");
 
 		// determine date/time range in UTC
@@ -183,9 +183,26 @@ public static class Program
 						if (pageNumber == 1 && etag is not null)
 							request.Headers.IfNoneMatch.Add(EntityTagHeaderValue.Parse(etag));
 
-						var response = await httpClient!.SendAsync(request);
-						if (isVerbose)
-							Console.WriteLine($"{request.RequestUri!.AbsoluteUri} [{response.StatusCode}]");
+						HttpResponseMessage response;
+
+						bool shouldRetry;
+						do
+						{
+							shouldRetry = false;
+							response = await httpClient!.SendAsync(request);
+							if (isVerbose)
+								Console.WriteLine($"{request.RequestUri!.AbsoluteUri} [{response.StatusCode}]");
+
+							if (response.StatusCode == HttpStatusCode.Forbidden &&
+								response.Headers.TryGetValues("Retry-After", out var retryAfterValues) &&
+								int.TryParse(retryAfterValues.FirstOrDefault() ?? "", out var retryAfterSeconds))
+							{
+								AddWarning($"Waiting {retryAfterSeconds}s for secondary rate limit.");
+								await Task.Delay(TimeSpan.FromSeconds(retryAfterSeconds));
+								shouldRetry = true;
+							}
+						}
+						while (shouldRetry);
 
 						if (pageNumber == 1 && etag is not null && response.StatusCode == HttpStatusCode.NotModified)
 						{
@@ -197,27 +214,19 @@ public static class Program
 						if (response.StatusCode == HttpStatusCode.NotFound)
 							return new PagedDownloadResult(DownloadStatus.NotFound);
 
-						if (response.StatusCode == HttpStatusCode.Forbidden)
+						if (response.StatusCode == HttpStatusCode.Forbidden &&
+							response.Headers.TryGetValues("X-RateLimit-Remaining", out var rateLimitRemainingValues) &&
+							rateLimitRemainingValues.FirstOrDefault() == "0" &&
+							response.Headers.TryGetValues("X-RateLimit-Reset", out var rateLimitResetValues) &&
+							int.TryParse(rateLimitResetValues.FirstOrDefault() ?? "", out var resetEpochSeconds))
 						{
-							if (response.Headers.TryGetValues("X-RateLimit-Remaining", out var rateLimitRemainingValues) &&
-								rateLimitRemainingValues.FirstOrDefault() == "0" &&
-								response.Headers.TryGetValues("X-RateLimit-Reset", out var rateLimitResetValues) &&
-								int.TryParse(rateLimitResetValues.FirstOrDefault() ?? "", out var resetEpochSeconds))
-							{
-								rateLimitResetUtc = DateTime.UnixEpoch.AddSeconds(resetEpochSeconds);
+							rateLimitResetUtc = DateTime.UnixEpoch.AddSeconds(resetEpochSeconds);
 
-								var message = "GitHub API rate limit exceeded. " +
-									$"Try again at {new DateTimeOffset(rateLimitResetUtc.Value).ToOffset(timeZoneOffset).ToString("f", culture)}.";
-								if (authToken is null)
-									message += " Specify a GitHub personal access token for a much higher rate limit.";
-								AddWarning(message);
-							}
-							else
-							{
-								AddWarning("Access forbidden.");
-								AddWarning("  Headers: " + string.Join("; ", response.Headers.Select(x => $"{x.Key}: {string.Join(", ", x.Value)}")));
-								AddWarning("  Body: " + await response.Content.ReadAsStringAsync());
-							}
+							var message = "GitHub API rate limit exceeded. " +
+								$"Try again at {new DateTimeOffset(rateLimitResetUtc.Value).ToOffset(timeZoneOffset).ToString("f", culture)}.";
+							if (authToken is null)
+								message += " Specify a GitHub personal access token for a much higher rate limit.";
+							AddWarning(message);
 
 							return new PagedDownloadResult(DownloadStatus.RateLimited);
 						}
@@ -226,7 +235,12 @@ public static class Program
 							throw new ApplicationException("GitHub API returned 401 Unauthorized. Ensure that your auth token is set to a valid personal access token.");
 
 						if (response.StatusCode != HttpStatusCode.OK)
-							throw new InvalidOperationException($"Unexpected status code: {response.StatusCode}");
+						{
+							throw new InvalidOperationException(string.Join(Environment.NewLine,
+								$"Unexpected status code: {response.StatusCode}",
+								$"Headers: {string.Join("; ", response.Headers.Select(x => $"{x.Key}: {string.Join(", ", x.Value)}"))}",
+								$"Body: {await response.Content.ReadAsStringAsync()}"));
+						}
 
 						if (pageNumber == 1)
 							etag = (response.Headers.ETag ?? throw new InvalidOperationException("Missing ETag.")).Tag;
