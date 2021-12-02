@@ -1,5 +1,9 @@
 # Release Notes
 
+## 0.7.8
+
+* Fix cache directory for multiple githubs.
+
 ## 0.7.7
 
 * Support [secondary rate limits](https://docs.github.com/en/rest/overview/resources-in-the-rest-api#secondary-rate-limits).
