@@ -191,7 +191,7 @@ public static class Program
 							shouldRetry = false;
 							response = await httpClient!.SendAsync(request);
 							if (isVerbose)
-								Console.WriteLine($"{request.RequestUri!.AbsoluteUri} [{response.StatusCode}]");
+								Console.WriteLine($"{request.RequestUri!.AbsoluteUri}{(request.Headers.IfNoneMatch.Count == 0 ? "" : " (IfNoneMatch)")} [{response.StatusCode}]");
 
 							if (response.StatusCode == HttpStatusCode.Forbidden &&
 								response.Headers.TryGetValues("Retry-After", out var retryAfterValues) &&
