@@ -194,25 +194,33 @@ public static class Program
 							break;
 						}
 
-						if (response.StatusCode == HttpStatusCode.Forbidden &&
-						    response.Headers.TryGetValues("X-RateLimit-Remaining", out var rateLimitRemainingValues) &&
-						    rateLimitRemainingValues.FirstOrDefault() == "0" &&
-						    response.Headers.TryGetValues("X-RateLimit-Reset", out var rateLimitResetValues) &&
-						    int.TryParse(rateLimitResetValues.FirstOrDefault() ?? "", out var resetEpochSeconds))
-						{
-							rateLimitResetUtc = DateTime.UnixEpoch.AddSeconds(resetEpochSeconds);
+						if (response.StatusCode == HttpStatusCode.NotFound)
+							return new PagedDownloadResult(DownloadStatus.NotFound);
 
-							var message = "GitHub API rate limit exceeded. " +
-								$"Try again at {new DateTimeOffset(rateLimitResetUtc.Value).ToOffset(timeZoneOffset).ToString("f", culture)}.";
-							if (authToken is null)
-								message += " Specify a GitHub personal access token for a much higher rate limit.";
-							AddWarning(message);
+						if (response.StatusCode == HttpStatusCode.Forbidden)
+						{
+							if (response.Headers.TryGetValues("X-RateLimit-Remaining", out var rateLimitRemainingValues) &&
+								rateLimitRemainingValues.FirstOrDefault() == "0" &&
+								response.Headers.TryGetValues("X-RateLimit-Reset", out var rateLimitResetValues) &&
+								int.TryParse(rateLimitResetValues.FirstOrDefault() ?? "", out var resetEpochSeconds))
+							{
+								rateLimitResetUtc = DateTime.UnixEpoch.AddSeconds(resetEpochSeconds);
+
+								var message = "GitHub API rate limit exceeded. " +
+									$"Try again at {new DateTimeOffset(rateLimitResetUtc.Value).ToOffset(timeZoneOffset).ToString("f", culture)}.";
+								if (authToken is null)
+									message += " Specify a GitHub personal access token for a much higher rate limit.";
+								AddWarning(message);
+							}
+							else
+							{
+								AddWarning("Access forbidden.");
+								AddWarning("  Headers: " + string.Join("; ", response.Headers.Select(x => $"{x.Key}: {string.Join(", ", x.Value)}")));
+								AddWarning("  Body: " + await response.Content.ReadAsStringAsync());
+							}
 
 							return new PagedDownloadResult(DownloadStatus.RateLimited);
 						}
-
-						if (response.StatusCode == HttpStatusCode.NotFound || response.StatusCode == HttpStatusCode.Forbidden)
-							return new PagedDownloadResult(DownloadStatus.NotFound);
 
 						if (response.StatusCode == HttpStatusCode.Unauthorized)
 							throw new ApplicationException("GitHub API returned 401 Unauthorized. Ensure that your auth token is set to a valid personal access token.");

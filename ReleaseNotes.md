@@ -1,5 +1,9 @@
 # Release Notes
 
+## 0.7.5
+
+* Show headers and body of unexpected forbidden.
+
 ## 0.7.4
 
 * Treat forbidden as not found instead of crashing.
