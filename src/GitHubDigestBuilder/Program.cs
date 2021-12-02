@@ -29,7 +29,7 @@ public static class Program
 		var isQuiet = args.ReadFlag("quiet");
 		var isVerbose = args.ReadFlag("verbose") && !isQuiet;
 		var outputDirectory = args.ReadOption("output");
-		var cacheDirectory = args.ReadOption("cache");
+		var rootCacheDirectory = args.ReadOption("cache");
 		var emailFrom = args.ReadOption("email-from");
 		var emailTo = args.ReadOption("email-to");
 		var emailSubject = args.ReadOption("email-subject");
@@ -131,7 +131,7 @@ public static class Program
 				const int cacheVersion = 2;
 
 				using var sha1 = SHA1.Create();
-				cacheDirectory = cacheDirectory is not null ? Path.GetFullPath(cacheDirectory) : Path.Combine(Path.GetTempPath(), "GitHubDigestBuilderCache");
+				var cacheDirectory = rootCacheDirectory is not null ? Path.GetFullPath(rootCacheDirectory) : Path.Combine(Path.GetTempPath(), "GitHubDigestBuilderCache");
 				cacheDirectory = Path.Combine(cacheDirectory, BitConverter.ToString(sha1.ComputeHash(Encoding.UTF8.GetBytes($"{cacheVersion} {apiBase} {authToken}"))).Replace("-", "")[..16]);
 				Directory.CreateDirectory(cacheDirectory);
 
