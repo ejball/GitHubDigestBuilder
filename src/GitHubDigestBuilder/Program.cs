@@ -147,6 +147,7 @@ public static class Program
 					var cacheFile = Path.Combine(cacheDirectory, $"{cacheName}.json");
 					var cacheElement = default(JsonElement);
 					string? etag = null;
+					string etagMessage;
 
 					if (File.Exists(cacheFile))
 					{
@@ -165,7 +166,18 @@ public static class Program
 
 						// don't use the cache if we may have stopped early and we're asking for an older report
 						if (isLastPage is null || string.CompareOrdinal(dateIso, cacheDateIso) >= 0)
+						{
 							etag = cacheElement.GetProperty("etag").GetString();
+							etagMessage = etag is null ? "no etag" : "with etag";
+						}
+						else
+						{
+							etagMessage = "old report";
+						}
+					}
+					else
+					{
+						etagMessage = "no cache";
 					}
 
 					if (rateLimitResetUtc is not null)
@@ -191,7 +203,7 @@ public static class Program
 								request.Headers.IfNoneMatch.Add(EntityTagHeaderValue.Parse(etag));
 							response = await httpClient!.SendAsync(request);
 							if (isVerbose)
-								Console.WriteLine($"{request.RequestUri!.AbsoluteUri}{(request.Headers.IfNoneMatch.Count == 0 ? "" : " (IfNoneMatch)")} [{response.StatusCode}]");
+								Console.WriteLine($"{request.RequestUri!.AbsoluteUri} ({etagMessage}) [{response.StatusCode}]");
 
 							if (response.StatusCode == HttpStatusCode.Forbidden &&
 								response.Headers.TryGetValues("Retry-After", out var retryAfterValues) &&
