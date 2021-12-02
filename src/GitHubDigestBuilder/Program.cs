@@ -197,7 +197,8 @@ public static class Program
 								response.Headers.TryGetValues("Retry-After", out var retryAfterValues) &&
 								int.TryParse(retryAfterValues.FirstOrDefault() ?? "", out var retryAfterSeconds))
 							{
-								AddWarning($"Waiting {retryAfterSeconds}s for secondary rate limit.");
+								if (isVerbose)
+									Console.WriteLine($"Waiting {retryAfterSeconds}s for secondary rate limit.");
 								await Task.Delay(TimeSpan.FromSeconds(retryAfterSeconds));
 								shouldRetry = true;
 							}
