@@ -5,14 +5,13 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using CodeGenCore;
 using GitHubDigestBuilder.Models;
 using GitHubDigestBuilder.Settings;
 using MailKit.Net.Smtp;
 using MailKit.Security;
 using MimeKit;
 using MimeKit.Text;
-using Scriban;
-using Scriban.Runtime;
 using YamlDotNet.Serialization;
 
 namespace GitHubDigestBuilder;
@@ -36,6 +35,12 @@ public static class Program
 		var emailSmtp = args.ReadOption("email-smtp");
 		var emailUsername = args.ReadOption("email-user");
 		var emailPassword = args.ReadOption("email-pwd");
+		var newline = args.ReadOption("newline") switch
+		{
+			"lf" => "\n",
+			"crlf" => "\r\n",
+			_ => throw new ArgsReaderException("Invalid --newline (use lf or crlf)."),
+		};
 		var configFilePath = args.ReadArgument();
 		args.VerifyComplete();
 
@@ -62,6 +67,15 @@ public static class Program
 
 		// determine culture
 		var culture = settings.Culture is null ? CultureInfo.CurrentCulture : CultureInfo.GetCultureInfo(settings.Culture);
+
+		// create code generation settings
+		var codeGenSettings = new CodeGenSettings
+		{
+			Culture = culture,
+			NewLine = newline,
+			SingleFileName = "report.html",
+			UseSnakeCase = true,
+		};
 
 		// determine output file or email
 		string? outputFile = null;
@@ -97,6 +111,7 @@ public static class Program
 			PreviousDate = date.AddDays(-1),
 			Now = now,
 			IsEmail = emailTo is not null,
+			Culture = culture,
 		};
 
 		try
@@ -1257,18 +1272,10 @@ public static class Program
 				}
 			}
 
-			var templateText = GetEmbeddedResourceText("GitHubDigestBuilder.template.scriban-html");
-			var template = Template.Parse(templateText);
-
-			var templateContext = new TemplateContext { StrictVariables = true };
-			templateContext.PushCulture(culture);
-
-			var scriptObject = new ScriptObject();
-			scriptObject.Import(report);
-			scriptObject.Import(typeof(ReportFunctions));
-			templateContext.PushGlobal(scriptObject);
-
-			var reportHtml = template.Render(templateContext);
+			var codeGenTemplateText = GetEmbeddedResourceText("GitHubDigestBuilder.template.scriban-html");
+			var codeGenTemplate = CodeGenTemplate.Parse(codeGenTemplateText);
+			var codeGenGlobals = CodeGenGlobals.Create(report);
+			var reportHtml = codeGenTemplate.Generate(codeGenGlobals, codeGenSettings)[0].Text;
 
 			if (outputFile is not null)
 			{
@@ -1308,17 +1315,10 @@ public static class Program
 		}
 		catch (Exception exception) when (outputFile is not null)
 		{
-			var templateText = GetEmbeddedResourceText("GitHubDigestBuilder.exception.scriban-html");
-			var template = Template.Parse(templateText);
-
-			var templateContext = new TemplateContext { StrictVariables = true };
-
-			var scriptObject = new ScriptObject();
-			scriptObject.Import(typeof(ReportFunctions));
-			scriptObject.Import(new { message = exception.ToString() });
-			templateContext.PushGlobal(scriptObject);
-
-			var reportHtml = template.Render(templateContext);
+			var codeGenTemplateText = GetEmbeddedResourceText("GitHubDigestBuilder.exception.scriban-html");
+			var codeGenTemplate = CodeGenTemplate.Parse(codeGenTemplateText);
+			var codeGenGlobals = CodeGenGlobals.Create(new ExceptionData { Message = exception.ToString() });
+			var reportHtml = codeGenTemplate.Generate(codeGenGlobals, codeGenSettings)[0].Text;
 
 			await File.WriteAllTextAsync(outputFile, reportHtml);
 
@@ -1385,6 +1385,7 @@ public static class Program
 			"  --quiet  (no console output)",
 			"  --verbose  (show GitHub API usage)",
 			"  --output <output-directory>  (default: .)",
+			"  --newline <lf|crlf> (default platform-specific)",
 			"  --cache <cache-directory>  (default: %TEMP%\\GitHubDigestBuilderCache)",
 			"  --email-from <address>  (send email from)",
 			"  --email-to <address>  (send email to)",

@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace GitHubDigestBuilder.Models;
 
 internal sealed class ReportData
@@ -13,4 +15,9 @@ internal sealed class ReportData
 	public List<RepoData> Repos { get; } = new();
 
 	public List<string> Warnings { get; } = new();
+
+	public CultureInfo? Culture { get; set; }
+
+	public string Format(object value, string format) =>
+		((IFormattable) value).ToString(format, Culture ?? CultureInfo.InvariantCulture);
 }
