@@ -1,5 +1,9 @@
 # Release Notes
 
+## 0.8.0
+
+* Add `--newline` setting.
+
 ## 0.7.8
 
 * Fix cache directory for multiple githubs.
