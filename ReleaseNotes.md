@@ -1,5 +1,9 @@
 # Release Notes
 
+## 0.8.1
+
+* `--newline` should be optional.
+
 ## 0.8.0
 
 * Add `--newline` setting.

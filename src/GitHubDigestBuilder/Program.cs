@@ -39,6 +39,7 @@ public static class Program
 		{
 			"lf" => "\n",
 			"crlf" => "\r\n",
+			null => null,
 			_ => throw new ArgsReaderException("Invalid --newline (use lf or crlf)."),
 		};
 		var configFilePath = args.ReadArgument();
