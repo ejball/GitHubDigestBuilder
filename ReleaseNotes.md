@@ -1,5 +1,9 @@
 # Release Notes
 
+## 0.8.2
+
+* Don't warn if network not found because permissions may prohibit.
+
 ## 0.8.1
 
 * `--newline` should be optional.

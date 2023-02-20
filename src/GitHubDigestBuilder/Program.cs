@@ -535,13 +535,11 @@ public static class Program
 					else if (repoStatus == DownloadStatus.NotFound)
 						AddWarning($"{sourceRepoName} repository not found.");
 
-					// check repository network for push events if we know of any pull request branches
+					// check repository network for push events if we know of any pull request branches; don't warn if not found because permissions may prohibit
 					if (repoStatus != DownloadStatus.NotFound && pullRequestBranches.Any(prb => prb.Value.Any(x => x.TargetRepo == sourceRepoName)))
 					{
-						var (rawNetworkEvents, networkStatus) = await LoadEventsAsync("networks", sourceRepoName);
+						var (rawNetworkEvents, _) = await LoadEventsAsync("networks", sourceRepoName);
 						rawEvents.AddRange(rawNetworkEvents);
-						if (networkStatus == DownloadStatus.NotFound)
-							AddWarning($"{sourceRepoName} repository network not found.");
 					}
 
 					var (rawRepoIssueEvents, repoIssueStatus) = await LoadIssueEventsAsync(sourceRepoName);
