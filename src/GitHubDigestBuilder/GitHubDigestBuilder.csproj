@@ -20,7 +20,7 @@
   <ItemGroup>
     <PackageReference Include="ArgsReading" Version="2.3.2" />
     <PackageReference Include="CodeGenCore" Version="0.3.0" />
-    <PackageReference Include="MailKit" Version="2.11.1" />
+    <PackageReference Include="MailKit" Version="4.16.0" />
     <PackageReference Include="YamlDotNet" Version="8.0.0" />
   </ItemGroup>
 
