@@ -1,5 +1,10 @@
 # Release Notes
 
+## 0.8.3
+
+* Update build and repository conventions.
+* Update MailKit and Scriban dependencies.
+
 ## 0.8.2
 
 * Don't warn if network not found because permissions may prohibit.

@@ -1,0 +1,23 @@
+<Project>
+  <!-- DO NOT EDIT: dotnet-common-props/properties convention -->
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
+    <CentralPackageFloatingVersionsEnabled>true</CentralPackageFloatingVersionsEnabled>
+  </PropertyGroup>
+  <!-- END DO NOT EDIT -->
+  <ItemGroup>
+    <PackageVersion Include="ArgsReading" Version="2.3.2" />
+    <PackageVersion Include="CodeGenCore" Version="0.3.0" />
+    <PackageVersion Include="MailKit" Version="4.17.0" />
+    <PackageVersion Include="Scriban" Version="7.2.1" />
+    <PackageVersion Include="YamlDotNet" Version="8.0.0" />
+  </ItemGroup>
+  <!-- DO NOT EDIT: dotnet-common-props/analyzers convention -->
+  <ItemGroup>
+    <GlobalPackageReference Include="Faithlife.Analyzers" Version="1.*" />
+    <GlobalPackageReference Include="NUnit.Analyzers" Version="4.*" />
+    <GlobalPackageReference Include="StyleCop.Analyzers" Version="1.*-*" />
+  </ItemGroup>
+  <!-- END DO NOT EDIT -->
+</Project>
