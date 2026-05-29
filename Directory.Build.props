@@ -10,7 +10,6 @@
     <Authors>Ed Ball</Authors>
   </PropertyGroup>
 
-  <!-- DO NOT EDIT: dotnet-common-props convention -->
   <PropertyGroup>
     <LangVersion>14.0</LangVersion>
     <Nullable>enable</Nullable>
@@ -23,8 +22,6 @@
     <RepositoryUrl>https://github.com/$(GitHubOrganization)/$(RepositoryName).git</RepositoryUrl>
     <Authors Condition=" '$(Authors)' == '' ">$(GitHubOrganization)</Authors>
     <Copyright>Copyright $(Authors)</Copyright>
-    <EnableNETAnalyzers>true</EnableNETAnalyzers>
-    <AnalysisLevel>latest-all</AnalysisLevel>
     <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <IsPackable>false</IsPackable>
@@ -38,6 +35,5 @@
     <NuGetAuditMode>all</NuGetAuditMode>
     <NuGetAuditLevel>low</NuGetAuditLevel>
   </PropertyGroup>
-  <!-- END DO NOT EDIT -->
 
 </Project>
