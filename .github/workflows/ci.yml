@@ -36,7 +36,6 @@ jobs:
     - name: Build
       run: ./build.ps1 build --skip restore
     - name: Test
-      if: ${{ hashFiles('tests/**/*.csproj') != '' }}
       run: ./build.ps1 test --skip build
     - name: Package
       run: ./build.ps1 package --skip test
