@@ -18,6 +18,11 @@ namespace GitHubDigestBuilder;
 
 public static class Program
 {
+	private static readonly JsonSerializerOptions s_deserializerOptions = new() { PropertyNameCaseInsensitive = true };
+	private static readonly JsonSerializerOptions s_indentedSerializerOptions = new() { WriteIndented = true };
+
+	private sealed class UserMessageException(string message) : Exception(message);
+
 	public static async Task RunAsync(ArgsReader args)
 	{
 		// read command-line arguments
@@ -47,15 +52,15 @@ public static class Program
 
 		// find config file
 		if (configFilePath is null)
-			throw new ApplicationException(GetUsage());
+			throw new UserMessageException(GetUsage());
 		configFilePath = Path.GetFullPath(configFilePath);
 		if (!File.Exists(configFilePath))
-			throw new ApplicationException("Configuration file not found.");
+			throw new UserMessageException("Configuration file not found.");
 
 		// deserialize config file
 		var settings = JsonSerializer.Deserialize<DigestSettings>(
 			ConvertYamlToJson(await File.ReadAllTextAsync(configFilePath)),
-			new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? throw new ApplicationException("Invalid configuration.");
+			s_deserializerOptions) ?? throw new UserMessageException("Invalid configuration.");
 
 		// determine date/time range in UTC
 		var timeZoneOffset = settings.TimeZoneOffsetHours is not null ? TimeSpan.FromHours(settings.TimeZoneOffsetHours.Value) : DateTimeOffset.Now.Offset;
@@ -83,11 +88,11 @@ public static class Program
 		if (emailTo is not null)
 		{
 			if (outputDirectory is not null)
-				throw new ApplicationException("Cannot use both --email-to and --output.");
+				throw new UserMessageException("Cannot use both --email-to and --output.");
 			if (emailFrom is null)
-				throw new ApplicationException("Missing required --email-from.");
+				throw new UserMessageException("Missing required --email-from.");
 			if (emailSmtp is null)
-				throw new ApplicationException("Missing required --email-smtp.");
+				throw new UserMessageException("Missing required --email-smtp.");
 		}
 		else
 		{
@@ -103,7 +108,7 @@ public static class Program
 		if (settings.GitHubs is not null)
 			githubs.AddRange(settings.GitHubs);
 		if (githubs.Count == 0)
-			throw new ApplicationException("Configuration file must specify at least one github.");
+			throw new UserMessageException("Configuration file must specify at least one github.");
 
 		// create report
 		var report = new ReportData
@@ -146,9 +151,9 @@ public static class Program
 
 				const int cacheVersion = 2;
 
-				using var sha1 = SHA1.Create();
 				var cacheDirectory = rootCacheDirectory is not null ? Path.GetFullPath(rootCacheDirectory) : Path.Combine(Path.GetTempPath(), "GitHubDigestBuilderCache");
-				cacheDirectory = Path.Combine(cacheDirectory, BitConverter.ToString(sha1.ComputeHash(Encoding.UTF8.GetBytes($"{cacheVersion} {apiBase} {authToken}"))).Replace("-", "")[..16]);
+				var cacheKey = SHA256.HashData(Encoding.UTF8.GetBytes($"{cacheVersion} {apiBase} {authToken}"));
+				cacheDirectory = Path.Combine(cacheDirectory, Convert.ToHexString(cacheKey)[..16]);
 				Directory.CreateDirectory(cacheDirectory);
 
 				// don't process the same event twice
@@ -159,7 +164,7 @@ public static class Program
 
 				async Task<PagedDownloadResult> LoadPagesAsync(string url, string[] accepts, int maxPageCount, Func<JsonElement, bool>? isLastPage = null)
 				{
-					var cacheName = Regex.Replace(Regex.Replace(url, @"\?.*$", ""), @"/+", "_").Trim('_');
+					var cacheName = Regex.Replace(Regex.Replace(url, @"\?.*$", ""), "/+", "_").Trim('_');
 					var cacheFile = Path.Combine(cacheDirectory, $"{cacheName}.json");
 					var cacheElement = default(JsonElement);
 					string? etag = null;
@@ -261,7 +266,7 @@ public static class Program
 						}
 
 						if (response.StatusCode == HttpStatusCode.Unauthorized)
-							throw new ApplicationException("GitHub API returned 401 Unauthorized. Ensure that your auth token is set to a valid personal access token.");
+							throw new UserMessageException("GitHub API returned 401 Unauthorized. Ensure that your auth token is set to a valid personal access token.");
 
 						if (response.StatusCode != HttpStatusCode.OK)
 						{
@@ -294,7 +299,7 @@ public static class Program
 						date = dateIso,
 						today = todayIso,
 						items,
-					}, new JsonSerializerOptions { WriteIndented = true });
+					}, s_indentedSerializerOptions);
 
 					return new PagedDownloadResult(status, items);
 				}
@@ -313,10 +318,9 @@ public static class Program
 
 				void AddRepoForSource(string repoName, int sourceIndex)
 				{
-					if (!sourceRepoIndices.ContainsKey(repoName))
+					if (sourceRepoIndices.TryAdd(repoName, sourceIndex))
 					{
 						sourceRepoNames.Add(repoName);
-						sourceRepoIndices.Add(repoName, sourceIndex);
 					}
 				}
 
@@ -329,9 +333,9 @@ public static class Program
 					foreach (var repoElement in result.Elements)
 					{
 						if (!repoElement.GetProperty("private").GetBoolean() &&
-						    !repoElement.GetProperty("archived").GetBoolean() &&
-						    !repoElement.GetProperty("disabled").GetBoolean() &&
-						    (topic is null || repoElement.GetProperty("topics").EnumerateArray().Select(x => x.GetString()).Any(x => x == topic)))
+							!repoElement.GetProperty("archived").GetBoolean() &&
+							!repoElement.GetProperty("disabled").GetBoolean() &&
+							(topic is null || repoElement.GetProperty("topics").EnumerateArray().Select(x => x.GetString()).Any(x => x == topic)))
 						{
 							orgRepoNames.Add(repoElement.GetProperty("full_name").GetString() ?? throw new InvalidOperationException("Missing full_name."));
 						}
@@ -349,7 +353,7 @@ public static class Program
 				var settingsRepos = github.Repos ?? new List<RepoSettings>();
 				var settingsUsers = github.Users ?? new List<UserSettings>();
 				if (settingsRepos.Count == 0 && settingsUsers.Count == 0)
-					throw new ApplicationException("No repositories or users specified in configuration.");
+					throw new UserMessageException("No repositories or users specified in configuration.");
 
 				foreach (var (settingsRepo, sourceIndex) in settingsRepos.Select((x, i) => (x, i)))
 				{
@@ -368,7 +372,7 @@ public static class Program
 							break;
 
 						default:
-							throw new ApplicationException("Invalid repo source: " + JsonSerializer.Serialize(settingsRepo));
+							throw new UserMessageException("Invalid repo source: " + JsonSerializer.Serialize(settingsRepo));
 					}
 				}
 
@@ -384,7 +388,7 @@ public static class Program
 							break;
 
 						default:
-							throw new ApplicationException("Invalid user source: " + JsonSerializer.Serialize(settingsUser));
+							throw new UserMessageException("Invalid user source: " + JsonSerializer.Serialize(settingsUser));
 					}
 				}
 
@@ -406,7 +410,7 @@ public static class Program
 							break;
 
 						default:
-							throw new ApplicationException("Invalid exclude: " + JsonSerializer.Serialize(exclude));
+							throw new UserMessageException("Invalid exclude: " + JsonSerializer.Serialize(exclude));
 					}
 				}
 
@@ -581,7 +585,7 @@ public static class Program
 
 				TeamData CreateTeam(string url)
 				{
-					var match = Regex.Match(url, @"/orgs/([^/]+)/teams/([^/]+)$");
+					var match = Regex.Match(url, "/orgs/([^/]+)/teams/([^/]+)$");
 					return new TeamData
 					{
 						WebBase = webBase,
@@ -679,13 +683,13 @@ public static class Program
 					void SetIssueBaseEventProperties(IssueBaseEventData eventData, JsonElement payloadElement)
 					{
 						if ((payloadElement.TryGetProperty("review_requester", "login")?.GetString() ??
-							    payloadElement.TryGetProperty("assigner", "login")?.GetString()) is { } sourceUserName)
+								payloadElement.TryGetProperty("assigner", "login")?.GetString()) is { } sourceUserName)
 						{
 							eventData.SourceUser = CreateUser(sourceUserName);
 						}
 
 						if ((payloadElement.TryGetProperty("requested_reviewer", "login")?.GetString() ??
-							    payloadElement.TryGetProperty("assignee", "login")?.GetString()) is { } targetUserName)
+								payloadElement.TryGetProperty("assignee", "login")?.GetString()) is { } targetUserName)
 						{
 							eventData.TargetUser = CreateUser(targetUserName);
 						}
@@ -736,8 +740,8 @@ public static class Program
 						if (pullRequestBranches.TryGetValue((repoName, branchName), out var pullRequestEvents))
 						{
 							foreach (var pullRequestEvent in pullRequestEvents
-								         .OrderByDescending(x => x.When)
-								         .TakeWhile(x => x.When >= rawEvent.CreatedUtc || x.Action != "closed"))
+										 .OrderByDescending(x => x.When)
+										 .TakeWhile(x => x.When >= rawEvent.CreatedUtc || x.Action != "closed"))
 							{
 								pullRequests.Add((pullRequestEvent.TargetRepo, pullRequestEvent.TargetNumber));
 							}
@@ -787,13 +791,13 @@ public static class Program
 
 								var push = events.LastOrDefault() as PushEventData;
 								if (push is null ||
-								    commitCount > 5 ||
-								    push.Actor?.Name != actor.Name ||
-								    push.Branch?.Name != branch?.Name ||
-								    push.PullRequest?.Number != pullRequest?.Number ||
-								    push.AfterSha != beforeSha ||
-								    !push.CanMerge ||
-								    !canMerge)
+									commitCount > 5 ||
+									push.Actor?.Name != actor.Name ||
+									push.Branch?.Name != branch?.Name ||
+									push.PullRequest?.Number != pullRequest?.Number ||
+									push.AfterSha != beforeSha ||
+									!push.CanMerge ||
+									!canMerge)
 								{
 									push = new PushEventData
 									{
@@ -953,14 +957,14 @@ public static class Program
 							});
 						}
 
-						var conversation = commit.Conversations.SingleOrDefault(x => x.FilePath == filePath && x.Position == position?.ToString());
+						var conversation = commit.Conversations.SingleOrDefault(x => x.FilePath == filePath && x.Position == position?.ToString(CultureInfo.InvariantCulture));
 						if (conversation is null)
 						{
 							commit.Conversations.Add(conversation = new ConversationData
 							{
 								Commit = commit,
 								FilePath = filePath,
-								Position = position.ToString(),
+								Position = position?.ToString(CultureInfo.InvariantCulture),
 							});
 						}
 
@@ -1151,17 +1155,17 @@ public static class Program
 					{
 						var action = payload.GetProperty("event").GetString() ?? throw new InvalidOperationException("Missing action.");
 						if (action != "auto_merge_disabled" &&
-						    action != "auto_merge_enabled" &&
-						    action != "auto_rebase_enabled" &&
-						    action != "auto_squash_enabled" &&
-						    action != "comment_deleted" &&
-						    action != "connected" &&
-						    action != "deployed" &&
-						    action != "mentioned" &&
-						    action != "head_ref_deleted" &&
-						    action != "head_ref_restored" &&
-						    action != "referenced" &&
-						    action != "subscribed")
+							action != "auto_merge_enabled" &&
+							action != "auto_rebase_enabled" &&
+							action != "auto_squash_enabled" &&
+							action != "comment_deleted" &&
+							action != "connected" &&
+							action != "deployed" &&
+							action != "mentioned" &&
+							action != "head_ref_deleted" &&
+							action != "head_ref_restored" &&
+							action != "referenced" &&
+							action != "subscribed")
 						{
 							var issueElement = payload.GetProperty("issue");
 							var number = issueElement.GetProperty("number").GetInt32();
@@ -1207,19 +1211,19 @@ public static class Program
 				}
 
 				foreach (var repo in repos
-					         .OrderBy(x => sourceRepoIndices.TryGetValue(x.Name!, out var i) ? i : int.MaxValue)
-					         .ThenBy(x => x.Name, StringComparer.InvariantCulture))
+							 .OrderBy(x => sourceRepoIndices.TryGetValue(x.Name!, out var i) ? i : int.MaxValue)
+							 .ThenBy(x => x.Name, StringComparer.InvariantCulture))
 				{
 					foreach (var pullRequest in repo.PullRequests)
 					{
 						// remove redundant pull request close events
 						foreach (var redundantEvent in pullRequest.Events
-							         .OfType<PullRequestEventData>()
-							         .Where(x => x.Kind == "closed" || x.Kind == "merged")
-							         .OrderBy(x => x.Kind == "merged")
-							         .ThenBy(x => x.Commit is not null)
-							         .SkipLast(1)
-							         .ToList())
+									 .OfType<PullRequestEventData>()
+									 .Where(x => x.Kind == "closed" || x.Kind == "merged")
+									 .OrderBy(x => x.Kind == "merged")
+									 .ThenBy(x => x.Commit is not null)
+									 .SkipLast(1)
+									 .ToList())
 						{
 							pullRequest.Events.Remove(redundantEvent);
 						}
@@ -1229,10 +1233,10 @@ public static class Program
 					{
 						// remove redundant issue reopened events
 						foreach (var redundantEvent in pullRequest.Events
-							         .OfType<PullRequestEventData>()
-							         .Where(x => x.Kind == "reopened")
-							         .SkipLast(1)
-							         .ToList())
+									 .OfType<PullRequestEventData>()
+									 .Where(x => x.Kind == "reopened")
+									 .SkipLast(1)
+									 .ToList())
 						{
 							pullRequest.Events.Remove(redundantEvent);
 						}
@@ -1242,10 +1246,10 @@ public static class Program
 					{
 						// remove redundant issue close events
 						foreach (var redundantEvent in issue.Events
-							         .OfType<IssueEventData>()
-							         .Where(x => x.Kind == "closed")
-							         .SkipLast(1)
-							         .ToList())
+									 .OfType<IssueEventData>()
+									 .Where(x => x.Kind == "closed")
+									 .SkipLast(1)
+									 .ToList())
 						{
 							issue.Events.Remove(redundantEvent);
 						}
@@ -1255,10 +1259,10 @@ public static class Program
 					{
 						// remove redundant issue reopened events
 						foreach (var redundantEvent in issue.Events
-							         .OfType<IssueEventData>()
-							         .Where(x => x.Kind == "reopened")
-							         .SkipLast(1)
-							         .ToList())
+									 .OfType<IssueEventData>()
+									 .Where(x => x.Kind == "reopened")
+									 .SkipLast(1)
+									 .ToList())
 						{
 							issue.Events.Remove(redundantEvent);
 						}
@@ -1286,23 +1290,27 @@ public static class Program
 			}
 			else if (emailTo is not null)
 			{
+				var emailFromValue = emailFrom ?? throw new UserMessageException("Missing required --email-from.");
+				var emailSmtpValue = emailSmtp ?? throw new UserMessageException("Missing required --email-smtp.");
+				var emailToValue = emailTo;
+
 				if (!isQuiet)
-					Console.WriteLine($"Sending email to: {emailTo}");
+					Console.WriteLine($"Sending email to: {emailToValue}");
 
 				var message = new MimeMessage();
-				message.From.Add(MailboxAddress.Parse(emailFrom));
-				foreach (var to in emailTo.Split(';').Select(x => x.Trim()).Where(x => x.Length != 0).Select(MailboxAddress.Parse))
+				message.From.Add(MailboxAddress.Parse(emailFromValue));
+				foreach (var to in emailToValue.Split(';').Select(x => x.Trim()).Where(x => x.Length != 0).Select(MailboxAddress.Parse))
 					message.To.Add(to);
 				message.Subject = emailSubject ?? ((FormattableString) $"GitHub Digest for {date:D}").ToString(culture);
 				message.Body = new TextPart(TextFormat.Html) { Text = reportHtml };
 
 				using var client = new SmtpClient();
-				await client.ConnectAsync(host: emailSmtp, port: 587, options: SecureSocketOptions.StartTls);
+				await client.ConnectAsync(host: emailSmtpValue, port: 587, options: SecureSocketOptions.StartTls);
 				if (emailUsername is not null || emailPassword is not null)
 				{
 					await client.AuthenticateAsync(
-						userName: emailUsername ?? throw new ApplicationException("Missing --email-user."),
-						password: emailPassword ?? throw new ApplicationException("Missing --email-pwd."));
+						userName: emailUsername ?? throw new UserMessageException("Missing --email-user."),
+						password: emailPassword ?? throw new UserMessageException("Missing --email-pwd."));
 				}
 				await client.SendAsync(message: message);
 				await client.DisconnectAsync(quit: true);
@@ -1356,7 +1364,7 @@ public static class Program
 			Console.Error.WriteLine(exception.Message);
 			return 1;
 		}
-		catch (ApplicationException exception)
+		catch (UserMessageException exception)
 		{
 			Console.Error.WriteLine(exception.Message);
 			return 1;
